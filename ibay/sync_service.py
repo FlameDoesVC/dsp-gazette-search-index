@@ -5,9 +5,13 @@ import threading
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from asgiref.sync import sync_to_async
 from bs4 import BeautifulSoup
 
 from ibay.models import Category, Product, ProductCategory, ProductImage, ProductInfo, Seller
+
+_add_root = sync_to_async(lambda **kw: Category.add_root(**kw))
+_add_child = sync_to_async(lambda parent, **kw: parent.add_child(**kw))
 
 logger = logging.getLogger(__name__)
 
@@ -18,43 +22,71 @@ USER_AGENT = (
     "Chrome/58.0.3029.110 Safari/537.3"
 )
 STALE_DAYS = 1
-CATEGORY_SYNC_INTERVAL_HOURS = 24
 DETAIL_SEMAPHORE_LIMIT = 12
 LINK_SEMAPHORE_LIMIT = 10
 BATCH_SIZE = 20
 LINK_BATCH_CONCURRENCY = 3
+MAX_PAGES_PER_CATEGORY = 5
 SYNC_INTERVAL_SECONDS = 600
 REQUEST_DELAY = 0.5
 
 
+async def _upsert_category(cid, name, parent_id=None):
+    existing = await Category.objects.filter(id=cid).afirst()
+    if existing:
+        if existing.name != name:
+            existing.name = name
+            await existing.asave(update_fields=["name"])
+        return
+    if parent_id is None:
+        await _add_root(id=cid, name=name)
+    else:
+        parent = await Category.objects.filter(id=parent_id).afirst()
+        if parent:
+            await _add_child(parent, id=cid, name=name)
+        else:
+            await _add_root(id=cid, name=name)
+
+
 async def sync_categories(client: httpx.AsyncClient):
-    cat_ids_synced = set()
+    visited = set()
 
     async def scrape_category(category_id, parent_id=None, level=0):
-        nonlocal cat_ids_synced
-        if category_id in cat_ids_synced and level > 0:
+        nonlocal visited
+        if category_id in visited:
             return
+        visited.add(category_id)
         url = f"{BASE_URL}/index.php?page=cat_ajax&id={category_id}"
-        response = await client.get(url, headers={"User-Agent": USER_AGENT})
-        if response.status_code != 200:
-            logger.error("Error fetching %s: Status %d", url, response.status_code)
+        try:
+            response = await client.get(
+                url, headers={"User-Agent": USER_AGENT}, timeout=15
+            )
+        except Exception:
+            logger.warning("Failed to fetch category %d at level %d, skipping subtree", category_id, level)
             return
-        cats = response.json()
+        if response.status_code != 200:
+            logger.warning("Status %d for category %d, skipping subtree", response.status_code, category_id)
+            return
+        try:
+            cats = response.json()
+        except Exception:
+            logger.warning("Non-JSON response for category %d, skipping subtree", category_id)
+            return
         if not cats:
             return
         tasks = []
         for item in cats:
             cid, cname = list(item.items())[0]
             cid = int(cid)
-            await Category.objects.aupdate_or_create(
-                id=cid, defaults={"name": cname, "parent_id": parent_id}
-            )
-            cat_ids_synced.add(cid)
+            await _upsert_category(cid, cname, parent_id)
             logger.info("%s%s (ID: %d)", "  " * level, cname, cid)
             task = asyncio.create_task(scrape_category(cid, cid, level + 1))
             tasks.append(task)
         if tasks:
-            await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for r in results:
+                if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError):
+                    logger.warning("Subcategory scrape raised: %s", r)
         await asyncio.sleep(REQUEST_DELAY)
 
     await scrape_category(0)
@@ -63,14 +95,13 @@ async def sync_categories(client: httpx.AsyncClient):
 async def sync_product_links(client: httpx.AsyncClient):
     sem = asyncio.Semaphore(LINK_SEMAPHORE_LIMIT)
     parent_cats = [
-        c async for c in Category.objects.filter(parent__isnull=True)
+        c async for c in Category.objects.filter(depth=1)
     ]
-    total_cats = len(parent_cats)
-    logger.info("Found %d parent categories for product link sync.", total_cats)
+    logger.info("Found %d parent categories for product link sync.", len(parent_cats))
 
     async def scrape_category_links(category):
         pages_with_data = 0
-        while True:
+        while pages_with_data < MAX_PAGES_PER_CATEGORY:
             async with sem:
                 url = (
                     f"{BASE_URL}/index.php?page=search&s_res=GO&lite=0"
@@ -120,14 +151,61 @@ async def sync_product_links(client: httpx.AsyncClient):
         asyncio.create_task(scrape_category_links(c))
         for c in parent_cats
     ]
-    batch_size = LINK_BATCH_CONCURRENCY
-    for i in range(0, len(tasks), batch_size):
-        await asyncio.gather(*tasks[i : i + batch_size])
+    for i in range(0, len(tasks), LINK_BATCH_CONCURRENCY):
+        await asyncio.gather(*tasks[i : i + LINK_BATCH_CONCURRENCY])
 
 
-def extract_seller_id(seller_url: str) -> int | None:
-    m = re.search(r"id=(\d+)", seller_url)
-    return int(m.group(1)) if m else None
+async def ensure_category_hierarchy(client, cat_ids_with_names):
+    parent_id = None
+    for entry in cat_ids_with_names:
+        cid = entry["id"]
+        existing = await Category.objects.filter(id=cid).afirst()
+        if existing:
+            if existing.name != entry["name"]:
+                existing.name = entry["name"]
+                await existing.asave(update_fields=["name"])
+        elif parent_id is None:
+            await _add_root(id=cid, name=entry["name"])
+            logger.info("Created root category %d: %s", cid, entry["name"])
+        else:
+            parent = await Category.objects.filter(id=parent_id).afirst()
+            if parent:
+                await _add_child(parent, id=cid, name=entry["name"])
+                logger.info("Created category %d: %s (parent=%d)", cid, entry["name"], parent_id)
+            else:
+                await _add_root(id=cid, name=entry["name"])
+                logger.info("Created root category %d: %s (parent %d missing)", cid, entry["name"], parent_id)
+        parent_id = cid
+
+
+async def fetch_seller_page(client, seller_id: int):
+    """Fetch seller profile page to get additional info (phone may be absent)."""
+    try:
+        url = f"{BASE_URL}/index.php?page=profile&id={seller_id}"
+        response = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
+        if response.status_code != 200:
+            return {}
+        soup = BeautifulSoup(response.text, "lxml")
+        info = {}
+
+        # Location is shown on the profile page as a <b> tag near "Location"
+        location_el = soup.find("b", string=re.compile(r"Male|Location"))
+        if location_el:
+            info["location"] = location_el.text.strip()
+
+        # Member since / last login
+        for b in soup.find_all("b"):
+            txt = b.text.strip()
+            if re.match(r"\d{2}-[A-Za-z]{3}-\d{4}", txt):
+                if "member_since" not in info:
+                    info["member_since"] = txt
+                else:
+                    info["last_login"] = txt
+
+        return info
+    except Exception:
+        logger.exception("Error fetching seller page for %d", seller_id)
+        return {}
 
 
 async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
@@ -147,54 +225,68 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
 
             soup = BeautifulSoup(response.text, "lxml")
 
-            if soup.find("font", class_="pagetitle", text="Listing disabled") or \
-               soup.find("p", class_="pagetitle", text="Listing not found"):
+            if soup.find("font", class_="pagetitle", string="Listing disabled") or \
+               soup.find("p", class_="pagetitle", string="Listing not found"):
                 await Product.objects.filter(id=product_id).aupdate(
                     status="ERROR", error_message="Listing disabled or not found"
                 )
                 logger.warning("Listing %d not available.", listing_id)
                 return
 
+            # ---- Seller ----
             seller_url_el = soup.select_one(".iw-user-name")
             seller_id = None
             if seller_url_el and seller_url_el.get("href"):
-                seller_id = extract_seller_id(seller_url_el["href"])
+                seller_id = int(re.search(r"id=(\d+)", seller_url_el["href"]).group(1))
                 seller_name_el = seller_url_el.select_one("b")
-                seller_name = seller_name_el.text.strip() if seller_name_el else None
+                seller_name = seller_name_el.text.strip() if seller_name_el else ""
                 contact_el = soup.select_one(".i-detail-des-n")
                 contact = contact_el.text.strip() if contact_el else ""
-                await Seller.objects.aupdate_or_create(
-                    id=seller_id,
-                    defaults={"name": seller_name or "", "contact_number": contact},
-                )
 
+                profile_info = await fetch_seller_page(client, seller_id)
+                _, created = await Seller.objects.aupdate_or_create(
+                    id=seller_id,
+                    defaults={
+                        "name": seller_name,
+                        "contact_number": contact,
+                        "location": profile_info.get("location", ""),
+                    },
+                )
+                if created:
+                    logger.info(
+                        "Created seller %d: %s (phone: %s)",
+                        seller_id, seller_name, contact,
+                    )
+
+            # ---- Price ----
             price_el = soup.select_one(".details-page_product-info .price")
             price = (
                 float(re.sub(r"[^\d.]+", "", price_el.text.strip()))
                 if price_el else None
             )
 
+            # ---- Description ----
             desc_el = soup.select_one(".iw-description-div")
             description = desc_el.get_text().strip() if desc_el else ""
 
+            # ---- Images ----
             images = [
                 img["src"] for img in soup.select("#fullscreen-viewer img")
             ]
 
-            last_updated_el = soup.find(
-                "div", string=re.compile("Last Updated : ")
-            )
+            # ---- Last updated ----
+            last_updated_el = soup.find("div", string=re.compile("Last Updated"))
             last_updated = None
             if last_updated_el:
                 m = re.search(
-                    r"Last Updated : (\d{1,2}-[A-Za-z]{3}-\d{4})",
-                    last_updated_el.text,
+                    r"(\d{1,2}-[A-Za-z]{3}-\d{4})", last_updated_el.text
                 )
                 if m:
                     last_updated = datetime.strptime(
                         m.group(1), "%d-%b-%Y"
                     ).date()
 
+            # ---- Item info table (Location, Condition, etc.) ----
             product_info = []
             location = None
             for row in soup.select(".item-info-table > table > tbody > tr"):
@@ -208,15 +300,25 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
                     else:
                         product_info.append({key: val})
 
-            breadcrumbs = soup.select(
-                'div a.breadcrumb.dark[href*="b"]'
-            )
-            cat_ids = []
-            for el in breadcrumbs:
+            # ---- Breadcrumb categories ----
+            raw_cats = []
+            seen_ids = set()
+            breadcrumb_els = soup.select("div a.breadcrumb.dark")
+            logger.debug("Found %d breadcrumb elements on %s", len(breadcrumb_els), url)
+            for el in breadcrumb_els:
                 m = re.search(r"b(\d+)", el["href"])
                 if m:
-                    cat_ids.append(int(m.group(1)))
+                    cid = int(m.group(1))
+                    if cid not in seen_ids:
+                        seen_ids.add(cid)
+                        raw_cats.append({"id": cid, "name": el.text.strip()})
 
+            logger.debug("Parsed %d unique categories from breadcrumbs: %s", len(raw_cats), [c["id"] for c in raw_cats])
+
+            if raw_cats:
+                await ensure_category_hierarchy(client, raw_cats)
+
+            # ---- Update product ----
             await Product.objects.filter(id=product_id).aupdate(
                 seller_id=seller_id,
                 price=price,
@@ -226,25 +328,20 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
                 status="SCRAPED",
             )
 
-            if cat_ids:
-                existing = set(
-                    row[0] async for row in
-                    ProductCategory.objects.filter(product_id=product_id)
-                    .values_list("category_id")
+            # ---- Link categories ----
+            for entry in raw_cats:
+                await ProductCategory.objects.aupdate_or_create(
+                    product_id=product_id, category_id=entry["id"]
                 )
-                new_cats = set(cat_ids) - existing
-                for cid in new_cats:
-                    if await Category.objects.filter(id=cid).aexists():
-                        await ProductCategory.objects.aupdate_or_create(
-                            product_id=product_id, category_id=cid
-                        )
 
+            # ---- Product images ----
             await ProductImage.objects.filter(product_id=product_id).adelete()
             for img_url in images:
                 await ProductImage.objects.acreate(
                     product_id=product_id, image_url=img_url
                 )
 
+            # ---- Product info key-values ----
             await ProductInfo.objects.filter(product_id=product_id).adelete()
             for info_item in product_info:
                 for k, v in info_item.items():
@@ -252,7 +349,7 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
                         product_id=product_id, info_key=k, info_value=v
                     )
 
-            logger.info("Scraped: %s", name)
+            logger.info("Scraped: %s (seller=%d, cats=%s)", name, seller_id or 0, [c["id"] for c in raw_cats])
 
         except Exception:
             logger.exception("Error processing %s", url)
@@ -294,25 +391,25 @@ async def update_stale_products(client: httpx.AsyncClient):
         ).values("id", "listing_id", "name", "url", "price", "description")
     ]
     total = len(stale)
+    if not total:
+        return
     logger.info("Found %d stale products to update.", total)
     sem = asyncio.Semaphore(DETAIL_SEMAPHORE_LIMIT)
     for i in range(0, total, BATCH_SIZE):
         batch = stale[i : i + BATCH_SIZE]
-        tasks = []
-        for p in batch:
-            tasks.append(
-                fetch_product_detail(
-                    client, sem, p["id"], p["listing_id"], p["name"], p["url"]
-                )
+        tasks = [
+            fetch_product_detail(
+                client, sem, p["id"], p["listing_id"], p["name"], p["url"]
             )
+            for p in batch
+        ]
         await asyncio.gather(*tasks)
         logger.info(
             "Stale update batch %d/%d done.",
             i // BATCH_SIZE + 1, (total + BATCH_SIZE - 1) // BATCH_SIZE,
         )
         await asyncio.sleep(1)
-    if total > 0:
-        logger.info("Stale product update done. %d products refreshed.", total)
+    logger.info("Stale product update done. %d products refreshed.", total)
 
 
 async def sync_all():

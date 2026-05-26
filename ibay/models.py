@@ -1,21 +1,22 @@
 from django.db import models
+from treebeard.mp_tree import MP_Node
 
 
-class Category(models.Model):
+class Category(MP_Node):
     id = models.IntegerField(primary_key=True)
     name = models.CharField(max_length=255)
-    parent = models.ForeignKey(
-        'self', null=True, blank=True, on_delete=models.CASCADE
-    )
     product_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    node_order_by = ['name']
 
     class Meta:
         verbose_name_plural = "categories"
 
     def __str__(self):
-        return self.name
+        prefix = "  " * (self.depth - 1) if self.depth else ""
+        return f"{prefix}{self.name}"
 
 
 class Seller(models.Model):
