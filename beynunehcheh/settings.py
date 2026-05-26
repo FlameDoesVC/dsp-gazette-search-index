@@ -13,8 +13,12 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
@@ -26,7 +30,7 @@ SECRET_KEY = 'django-insecure--xa13!_4x+q4gzeqct-hi9(9mukffbr5&acj36uj)s$oyz8kav
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['10.0.0.107', 'localhost', '127.0.0.1']
 
 
 # Application definition
@@ -134,8 +138,9 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'verbose': {
-            'format': '{levelname} [{name}] {message}',
+            'format': '{asctime} {levelname} [{name}] {message}',
             'style': '{',
+            'datefmt': '%H:%M:%S',
         },
     },
     'handlers': {
@@ -149,3 +154,8 @@ LOGGING = {
         'ibay': {'handlers': ['console'], 'level': 'INFO'},
     },
 }
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:12b")

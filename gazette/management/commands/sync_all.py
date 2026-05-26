@@ -8,8 +8,10 @@ from ibay.sync_service import sync_all as sync_ibay
 
 
 class Command(BaseCommand):
-    help = "Run a single sync cycle for gazette and ibay"
+    help = "Run a single sync cycle for gazette and ibay in parallel"
 
     def handle(self, *args, **options):
-        async_to_sync(sync_gazette)()
-        async_to_sync(sync_ibay)()
+        async def _run():
+            await asyncio.gather(sync_gazette(), sync_ibay())
+
+        async_to_sync(_run)()

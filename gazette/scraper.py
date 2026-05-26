@@ -103,6 +103,8 @@ async def fetch_and_parse_announcement(client, iulaan_id: str) -> Iulaan:
     metadata = soup.find_all('div', class_="info")
     for metadata_div in metadata:
         text = metadata_div.get_text(strip=True)
+        if ':' not in text:
+            continue
         key, value = text.split(':', 1)
         additional_info[key.strip()] = value.strip()
 

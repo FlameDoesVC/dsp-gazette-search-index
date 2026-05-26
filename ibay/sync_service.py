@@ -23,7 +23,7 @@ USER_AGENT = (
     "Chrome/58.0.3029.110 Safari/537.3"
 )
 STALE_DAYS = 1
-DETAIL_SEMAPHORE_LIMIT = 12
+DETAIL_SEMAPHORE_LIMIT = 6
 LINK_SEMAPHORE_LIMIT = 10
 BATCH_SIZE = 20
 LINK_BATCH_CONCURRENCY = 3
@@ -213,7 +213,7 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
     async with sem:
         try:
             response = await client.get(
-                url, headers={"User-Agent": USER_AGENT}, timeout=30
+                url, headers={"User-Agent": USER_AGENT}, timeout=60
             )
             if response.status_code in (301, 404):
                 await Product.objects.filter(id=product_id).aupdate(
@@ -415,7 +415,7 @@ async def update_stale_products(client: httpx.AsyncClient):
 
 async def sync_all():
     logger.info("=== Starting ibay sync ===")
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=60) as client:
         logger.info("--- Syncing categories ---")
         await sync_categories(client)
         logger.info("--- Syncing product links ---")
