@@ -1,0 +1,141 @@
+import asyncio
+import threading
+
+import httpx
+
+from gazette.models import Iulaan
+from gazette.scraper import (
+    fetch_and_parse_announcement,
+    fetch_index_links,
+    get_max_page_number,
+)
+
+MAX_INDEX_PAGES = 2
+MAX_CONCURRENT_REQUESTS = 3
+REQUEST_DELAY = 0.5
+SYNC_INTERVAL_SECONDS = 300
+
+
+async def sync_all():
+    total_new = 0
+    total_fetched = 0
+    total_failed = 0
+
+    async with httpx.AsyncClient() as client:
+        max_page = await get_max_page_number(client)
+        if MAX_INDEX_PAGES:
+            max_page = min(max_page, MAX_INDEX_PAGES)
+        print(f"Found {max_page} pages to check for announcements.")
+
+        page_queue = asyncio.Queue()
+        iulaan_id_queue = asyncio.Queue()
+
+        type_new_count = 0
+        type_skipped_count = 0
+        type_fetched_count = 0
+        type_failed_count = 0
+
+        async def page_worker():
+            nonlocal type_new_count, type_skipped_count
+            while True:
+                page_num = await page_queue.get()
+                try:
+                    iulaan_ids = await fetch_index_links(client, page_number=page_num)
+                    for iulaan_id in iulaan_ids:
+                        if not await Iulaan.objects.filter(id=iulaan_id).aexists():
+                            await iulaan_id_queue.put(iulaan_id)
+                            type_new_count += 1
+                        else:
+                            type_skipped_count += 1
+                except httpx.HTTPStatusError as e:
+                    print(f"HTTP error fetching page {page_num}: {e}")
+                finally:
+                    page_queue.task_done()
+                await asyncio.sleep(REQUEST_DELAY)
+
+        async def iulaan_worker():
+            nonlocal type_fetched_count, type_failed_count
+            while True:
+                iulaan_id = await iulaan_id_queue.get()
+                try:
+                    iulaan_data = await fetch_and_parse_announcement(client, iulaan_id)
+                    await Iulaan.objects.aupdate_or_create(
+                        id=iulaan_data.id,
+                        defaults={
+                            "title": iulaan_data.title,
+                            "office_name": iulaan_data.office_name,
+                            "iulaan_type": iulaan_data.iulaan_type,
+                            "additional_info": iulaan_data.additional_info,
+                            "attachments": iulaan_data.attachments,
+                            "body": iulaan_data.body,
+                        },
+                    )
+                    type_fetched_count += 1
+                except httpx.HTTPStatusError as e:
+                    print(f"HTTP error fetching iulaan {iulaan_id}: {e}")
+                    type_failed_count += 1
+                except Exception as e:
+                    print(f"An error occurred processing {iulaan_id}: {e}")
+                    type_failed_count += 1
+                finally:
+                    iulaan_id_queue.task_done()
+
+        page_workers = [
+            asyncio.create_task(page_worker())
+            for _ in range(MAX_CONCURRENT_REQUESTS)
+        ]
+        iulaan_workers = [
+            asyncio.create_task(iulaan_worker())
+            for _ in range(MAX_CONCURRENT_REQUESTS)
+        ]
+
+        for page_num in range(1, max_page + 1):
+            await page_queue.put(page_num)
+
+        await page_queue.join()
+        await iulaan_id_queue.join()
+
+        for worker in page_workers + iulaan_workers:
+            worker.cancel()
+        await asyncio.gather(
+            *page_workers, *iulaan_workers, return_exceptions=True
+        )
+
+        total_new += type_new_count
+        total_fetched += type_fetched_count
+        total_failed += type_failed_count
+
+        print(
+            f"Found {type_new_count} new announcements. "
+            f"Skipped {type_skipped_count} existing ones."
+        )
+        print(
+            f"Successfully fetched {type_fetched_count} new announcements. "
+            f"Failed: {type_failed_count}."
+        )
+
+    print("\n--- Sync Summary ---")
+    print(f"Total new announcements found: {total_new}")
+    print(f"Total successfully fetched: {total_fetched}")
+    print(f"Total failed: {total_failed}")
+    print("Sync complete.")
+
+
+async def run_sync_loop():
+    print("Starting continuous gazette sync...")
+    while True:
+        try:
+            await sync_all()
+        except Exception as e:
+            print(e)
+            print(f"Sync cycle failed: {e}")
+        print(f"Sleeping for {SYNC_INTERVAL_SECONDS}s before next sync...")
+        await asyncio.sleep(SYNC_INTERVAL_SECONDS)
+
+
+def start_sync_thread():
+    def _run():
+        asyncio.run(run_sync_loop())
+
+    thread = threading.Thread(target=_run, daemon=True, name="gazette-sync")
+    thread.start()
