@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 
 import httpx
@@ -9,6 +10,8 @@ from gazette.scraper import (
     fetch_index_links,
     get_max_page_number,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_INDEX_PAGES = 2
 MAX_CONCURRENT_REQUESTS = 3
@@ -25,7 +28,7 @@ async def sync_all():
         max_page = await get_max_page_number(client)
         if MAX_INDEX_PAGES:
             max_page = min(max_page, MAX_INDEX_PAGES)
-        print(f"Found {max_page} pages to check for announcements.")
+        logger.info("Found %d pages to check for announcements.", max_page)
 
         page_queue = asyncio.Queue()
         iulaan_id_queue = asyncio.Queue()
@@ -48,7 +51,7 @@ async def sync_all():
                         else:
                             type_skipped_count += 1
                 except httpx.HTTPStatusError as e:
-                    print(f"HTTP error fetching page {page_num}: {e}")
+                    logger.error("HTTP error fetching page %d: %s", page_num, e)
                 finally:
                     page_queue.task_done()
                 await asyncio.sleep(REQUEST_DELAY)
@@ -72,10 +75,10 @@ async def sync_all():
                     )
                     type_fetched_count += 1
                 except httpx.HTTPStatusError as e:
-                    print(f"HTTP error fetching iulaan {iulaan_id}: {e}")
+                    logger.error("HTTP error fetching iulaan %s: %s", iulaan_id, e)
                     type_failed_count += 1
-                except Exception as e:
-                    print(f"An error occurred processing {iulaan_id}: {e}")
+                except Exception:
+                    logger.exception("An error occurred processing %s", iulaan_id)
                     type_failed_count += 1
                 finally:
                     iulaan_id_queue.task_done()
@@ -105,31 +108,29 @@ async def sync_all():
         total_fetched += type_fetched_count
         total_failed += type_failed_count
 
-        print(
-            f"Found {type_new_count} new announcements. "
-            f"Skipped {type_skipped_count} existing ones."
+        logger.info(
+            "Found %d new announcements. Skipped %d existing ones.",
+            type_new_count, type_skipped_count,
         )
-        print(
-            f"Successfully fetched {type_fetched_count} new announcements. "
-            f"Failed: {type_failed_count}."
+        logger.info(
+            "Successfully fetched %d new announcements. Failed: %d.",
+            type_fetched_count, type_failed_count,
         )
 
-    print("\n--- Sync Summary ---")
-    print(f"Total new announcements found: {total_new}")
-    print(f"Total successfully fetched: {total_fetched}")
-    print(f"Total failed: {total_failed}")
-    print("Sync complete.")
+    logger.info(
+        "Sync summary: %d new, %d fetched, %d failed.",
+        total_new, total_fetched, total_failed,
+    )
 
 
 async def run_sync_loop():
-    print("Starting continuous gazette sync...")
+    logger.info("Starting continuous gazette sync...")
     while True:
         try:
             await sync_all()
-        except Exception as e:
-            print(e)
-            print(f"Sync cycle failed: {e}")
-        print(f"Sleeping for {SYNC_INTERVAL_SECONDS}s before next sync...")
+        except BaseException:
+            logger.exception("Sync cycle failed")
+        logger.info("Sleeping for %ds before next sync...", SYNC_INTERVAL_SECONDS)
         await asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
 
