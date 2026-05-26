@@ -3,6 +3,9 @@ import logging
 import threading
 
 import httpx
+from bs4 import BeautifulSoup
+from deep_translator import GoogleTranslator
+from django.conf import settings
 
 from gazette.models import Iulaan
 from gazette.scraper import (
@@ -13,10 +16,41 @@ from gazette.scraper import (
 
 logger = logging.getLogger(__name__)
 
-MAX_INDEX_PAGES = 2
+MAX_INDEX_PAGES = 2 if settings.DEBUG else None
 MAX_CONCURRENT_REQUESTS = 3
 REQUEST_DELAY = 0.5
 SYNC_INTERVAL_SECONDS = 300
+TRANSLATE_CHUNK_SIZE = 4500
+
+
+def _strip_html(html_text):
+    return BeautifulSoup(html_text, "html.parser").get_text()
+
+
+async def _translate_to_en(text):
+    if not text or not text.strip():
+        return ""
+    try:
+        result = await asyncio.to_thread(
+            GoogleTranslator(source="dv", target="en").translate, text
+        )
+        return result or ""
+    except Exception:
+        logger.warning("Translation failed for: %s...", text[:80])
+        return ""
+
+
+async def _translate_body(html_body):
+    text = _strip_html(html_body)
+    if not text.strip():
+        return ""
+    results = []
+    for i in range(0, len(text), TRANSLATE_CHUNK_SIZE):
+        chunk = text[i : i + TRANSLATE_CHUNK_SIZE]
+        translated = await _translate_to_en(chunk)
+        if translated:
+            results.append(translated)
+    return " ".join(results)
 
 
 async def sync_all():
@@ -61,19 +95,34 @@ async def sync_all():
             while True:
                 iulaan_id = await iulaan_id_queue.get()
                 try:
-                    iulaan_data = await fetch_and_parse_announcement(client, iulaan_id)
+                    data = await fetch_and_parse_announcement(client, iulaan_id)
+
+                    translated_title = await _translate_to_en(data.title)
+                    translated_office = await _translate_to_en(data.office_name)
+                    translated_body = await _translate_body(data.body)
+
+                    attachments = data.attachments or {}
+                    translated_attachments = {}
+                    for key, url in attachments.items():
+                        trans_key = await _translate_to_en(key)
+                        translated_attachments[trans_key or key] = url
+
                     await Iulaan.objects.aupdate_or_create(
-                        id=iulaan_data.id,
+                        id=data.id,
                         defaults={
-                            "title": iulaan_data.title,
-                            "office_name": iulaan_data.office_name,
-                            "iulaan_type": iulaan_data.iulaan_type,
-                            "additional_info": iulaan_data.additional_info,
-                            "attachments": iulaan_data.attachments,
-                            "body": iulaan_data.body,
+                            "title": data.title,
+                            "translated_title": translated_title,
+                            "office_name": data.office_name,
+                            "translated_office_name": translated_office,
+                            "iulaan_type": data.iulaan_type,
+                            "additional_info": data.additional_info,
+                            "attachments": translated_attachments,
+                            "body": data.body,
+                            "translated_body": translated_body,
                         },
                     )
                     type_fetched_count += 1
+                    logger.info("Scraped + translated: %s", data.title[:60])
                 except httpx.HTTPStatusError as e:
                     logger.error("HTTP error fetching iulaan %s: %s", iulaan_id, e)
                     type_failed_count += 1

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from asgiref.sync import sync_to_async
 from bs4 import BeautifulSoup
+from django.conf import settings
 
 from ibay.models import Category, Product, ProductCategory, ProductImage, ProductInfo, Seller
 
@@ -26,7 +27,7 @@ DETAIL_SEMAPHORE_LIMIT = 12
 LINK_SEMAPHORE_LIMIT = 10
 BATCH_SIZE = 20
 LINK_BATCH_CONCURRENCY = 3
-MAX_PAGES_PER_CATEGORY = 5
+MAX_PAGES_PER_CATEGORY = 5 if settings.DEBUG else None
 SYNC_INTERVAL_SECONDS = 600
 REQUEST_DELAY = 0.5
 
@@ -101,7 +102,7 @@ async def sync_product_links(client: httpx.AsyncClient):
 
     async def scrape_category_links(category):
         pages_with_data = 0
-        while pages_with_data < MAX_PAGES_PER_CATEGORY:
+        while MAX_PAGES_PER_CATEGORY is None or pages_with_data < MAX_PAGES_PER_CATEGORY:
             async with sem:
                 url = (
                     f"{BASE_URL}/index.php?page=search&s_res=GO&lite=0"

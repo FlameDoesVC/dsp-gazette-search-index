@@ -2,5 +2,10 @@ from django.contrib import admin
 
 from gazette.models import Iulaan
 
-# Register your models here.
-admin.site.register(Iulaan)
+
+class IulaanAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'translated_title', 'office_name', 'iulaan_type')
+    search_fields = ('title', 'translated_title', 'office_name', 'body', 'translated_body')
+
+
+admin.site.register(Iulaan, IulaanAdmin)
