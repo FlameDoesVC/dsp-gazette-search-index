@@ -115,6 +115,17 @@ DATABASES = {
     ),
 }
 
+# 'direct' is the same physical database as 'default', reached without the
+# pooler. Saying so keeps the test runner from building a second, empty test
+# database that a management command would read and find nothing in.
+DATABASES["direct"]["TEST"] = {"MIRROR": "default"}
+
+# Alias used for streaming reads in management commands. 'direct' bypasses the
+# pooler so server-side cursors work over millions of rows. Tests point it at
+# 'default', because a second connection cannot see an uncommitted test
+# transaction -- streaming five rows exercises the same code either way.
+STREAM_DB_ALIAS = os.environ.get("STREAM_DB_ALIAS", "direct")
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

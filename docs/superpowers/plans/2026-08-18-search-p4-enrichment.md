@@ -253,6 +253,29 @@ PENSION_BASE = os.getenv("PENSION_BASE", "basic")   # basic | gross
 DEFAULT_WORKING_DAYS = int(os.getenv("DEFAULT_WORKING_DAYS", "20"))
 ```
 
+Also add, next to the `DATABASES` block:
+
+```python
+# 'direct' is the same physical database as 'default', reached without the
+# pooler. Saying so keeps the test runner from building a second, empty test
+# database that a management command would read and find nothing in.
+DATABASES["direct"]["TEST"] = {"MIRROR": "default"}
+
+# Alias used for streaming reads in management commands. 'direct' bypasses the
+# pooler so server-side cursors work over millions of rows. Tests point it at
+# 'default', because a second connection cannot see an uncommitted test
+# transaction -- streaming five rows exercises the same code either way.
+STREAM_DB_ALIAS = os.environ.get("STREAM_DB_ALIAS", "direct")
+```
+
+and set `STREAM_DB_ALIAS = default` in `pytest.ini`'s `env` section (or export
+it in the test runner). **Every `.using("direct")` in a code path that has a
+test must be `.using(settings.STREAM_DB_ALIAS)` instead.** Without this,
+`select_keys` in task 10 reads a different database than the one the test wrote
+to and silently returns nothing — which looks exactly like a broken selection
+gate. This is infrastructure, not a test-only hack: production still resolves
+to `direct`.
+
 Add `DEEPSEEK_API_KEY` and the `PENSION_*` keys to the `x-django-env` block in `compose.yml` if not already present (`compose.prod.yml` already carries `DEEPSEEK_API_KEY`).
 
 - [ ] **Step 7: Make and run the migration**
@@ -3481,15 +3504,16 @@ def test_build_input_returns_none_for_a_missing_key():
 
 
 @pytest.mark.django_db
-async def test_enrich_one_writes_an_ok_record(gazette_job):
-    inp = await sync_to_async(build_input)("gazette", "IUL-1")
+def test_enrich_one_writes_an_ok_record(gazette_job):
+    inp = build_input("gazette", "IUL-1")
+    assert inp is not None
     client = _StubClient({
         "doc_type": "job", "doc_type_confidence": 0.95,
         "canonical_title_en": "Administrative Officer",
         "summary_en": "A post at the Ministry of Example.",
         "attrs": {"compensation": {"basic_salary": 10750, "salary_state": "listed"}},
     })
-    rec = await enrich_one(inp, client)
+    rec = async_to_sync(enrich_one)(inp, client)
     assert rec.status == "ok"
     assert rec.doc_type == "job"
     assert rec.attrs["compensation"]["basic_salary"] == 10750
@@ -3498,28 +3522,28 @@ async def test_enrich_one_writes_an_ok_record(gazette_job):
 
 
 @pytest.mark.django_db
-async def test_low_confidence_override_loses_to_the_prior(gazette_job):
-    inp = await sync_to_async(build_input)("gazette", "IUL-1")
+def test_low_confidence_override_loses_to_the_prior(gazette_job):
+    inp = build_input("gazette", "IUL-1")
     client = _StubClient({"doc_type": "shopping", "doc_type_confidence": 0.4,
                           "attrs": {}})
-    rec = await enrich_one(inp, client)
+    rec = async_to_sync(enrich_one)(inp, client)
     assert rec.doc_type == "job"          # the prior wins
 
 
 @pytest.mark.django_db
-async def test_an_ungrounded_salary_is_dropped_and_recorded(gazette_job):
-    inp = await sync_to_async(build_input)("gazette", "IUL-1")
+def test_an_ungrounded_salary_is_dropped_and_recorded(gazette_job):
+    inp = build_input("gazette", "IUL-1")
     client = _StubClient({
         "doc_type": "job",
         "attrs": {"compensation": {"basic_salary": 99999, "salary_state": "listed"}},
     })
-    rec = await enrich_one(inp, client)
+    rec = async_to_sync(enrich_one)(inp, client)
     assert rec.attrs["compensation"]["basic_salary"] is None
     assert rec.validation["dropped"]
 
 
 @pytest.mark.django_db
-async def test_a_provider_failure_records_failed_and_does_not_raise(gazette_job):
+def test_a_provider_failure_records_failed_and_does_not_raise(gazette_job):
     from enrich.client import ProviderError
 
     class _Broken:
@@ -3528,8 +3552,8 @@ async def test_a_provider_failure_records_failed_and_does_not_raise(gazette_job)
         async def aclose(self):
             pass
 
-    inp = await sync_to_async(build_input)("gazette", "IUL-1")
-    rec = await enrich_one(inp, _Broken())
+    inp = build_input("gazette", "IUL-1")
+    rec = async_to_sync(enrich_one)(inp, _Broken())
     assert rec.status == "failed"
     assert "all stages failed" in rec.error
 
@@ -3609,7 +3633,16 @@ def test_failed_records_are_retried_up_to_the_attempt_cap():
     assert list(select_keys(source="ibay", prompt_version=1)) == []
 ```
 
-Import `sync_to_async` at the top of that file: `from asgiref.sync import sync_to_async`.
+Import at the top of that file: `from asgiref.sync import async_to_sync`.
+
+These tests are **synchronous** and wrap `enrich_one` with `async_to_sync`,
+rather than being `async def` and awaiting it. That is not a style choice:
+`sync_to_async` dispatches to a worker thread, the thread opens its own
+database connection, and that connection cannot see the uncommitted
+transaction `@pytest.mark.django_db` wraps the test in. `build_input` would
+return `None` and `enrich_one` would fail with
+`AttributeError: 'NoneType' object has no attribute 'source'`. Calling
+`build_input` directly on the test's own thread avoids the whole problem.
 
 `tests/enrich/test_command.py`:
 
@@ -3875,18 +3908,16 @@ def select_keys(
          prompt improvement reaches only newly-ingested iulaan. Without this
          the next PROMPT_VERSION bump silently re-bills 51,000 documents.
     """
-    qs = SearchDocument.objects.using("direct").filter(source=source)
+    qs = SearchDocument.objects.using(settings.STREAM_DB_ALIAS).filter(source=source)
     if doc_type:
         qs = qs.filter(doc_type=doc_type)
     if only_stale:
         qs = qs.filter(stale_marked_at__isnull=False)
 
-    existing = {
-        (r.source_key): r
-        for r in EnrichedRecord.objects.using("direct").filter(source=source).only(
-            "source_key", "content_hash", "prompt_version", "status", "attempts"
-        )
-    }
+    records = EnrichedRecord.objects.using(settings.STREAM_DB_ALIAS).filter(
+        source=source
+    ).only("source_key", "content_hash", "prompt_version", "status", "attempts")
+    existing = {r.source_key: r for r in records}
 
     yielded = 0
     for doc in qs.only("source_key", "content_hash", "stale_marked_at").iterator(
@@ -3926,7 +3957,7 @@ async def run_pass(
             if inp is None:
                 counts["skipped"] += 1
                 return
-            rec = await enrich_one(inp, client)
+            rec = async_to_sync(enrich_one)(inp, client)
             counts[rec.status] = counts.get(rec.status, 0) + 1
 
     try:
