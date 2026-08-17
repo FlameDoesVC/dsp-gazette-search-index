@@ -1,0 +1,186 @@
+# Production stack.
+#
+#   docker compose -f compose.prod.yml up -d --build
+#
+# Required environment (no defaults, deliberately):
+#   POSTGRES_PASSWORD, DJANGO_SECRET_KEY, SITE_ADDRESS, ACME_EMAIL
+#
+# Ollama is not part of this stack. It runs on the GPU host, reached over
+# OLLAMA_URL.
+
+name: beynunehcheh-prod
+
+x-django-env: &django-env
+  # 'default' goes through PgBouncer: each Postgres backend costs 5-10 MB, and
+  # web requests are short transactions. Transaction-mode pooling forbids
+  # server-side cursors, hence DISABLE_SERVER_SIDE_CURSORS on this alias.
+  DATABASE_URL: postgres://${POSTGRES_USER:-beynunehcheh}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@pgbouncer:6432/${POSTGRES_DB:-beynunehcheh}
+  # 'direct' bypasses the pooler. Management commands (reindex, enrich, sync)
+  # use it because streaming over 5M rows needs real server-side cursors.
+  DATABASE_URL_DIRECT: postgres://${POSTGRES_USER:-beynunehcheh}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-beynunehcheh}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
+  DJANGO_DEBUG: "0"
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-${SITE_ADDRESS}}
+  PYTHONUNBUFFERED: "1"
+  OLLAMA_URL: ${OLLAMA_URL:-}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:12b}
+  ENRICH_PROVIDER: ${ENRICH_PROVIDER:-deepseek}
+  ENRICH_MODEL: ${ENRICH_MODEL:-deepseek-v4-flash}
+  ENRICH_MODEL_ESCALATION: ${ENRICH_MODEL_ESCALATION:-deepseek-v4-pro}
+  ENRICH_MODEL_LOCAL: ${ENRICH_MODEL_LOCAL:-qwen3.5:4b}
+  ENRICH_CONCURRENCY: ${ENRICH_CONCURRENCY:-8}
+  TRANSLATE_CONCURRENCY: ${TRANSLATE_CONCURRENCY:-4}
+  TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-claude-haiku-4-5}
+  TRANSCRIBE_MAX_PAGES: ${TRANSCRIBE_MAX_PAGES:-10}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?set DEEPSEEK_API_KEY}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-beynunehcheh}
+      POSTGRES_USER: ${POSTGRES_USER:-beynunehcheh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    # Tuned for a small box. See section 12.5 of the design spec for the
+    # 2/4/8 GB table; these are the 4 GB values. work_mem stays small because
+    # the query planner never sorts more than the 500-row candidate set.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-2560MB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-8MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-30}
+      - -c
+      - random_page_cost=1.1
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-beynunehcheh} -d ${POSTGRES_DB:-beynunehcheh}
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-beynunehcheh}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB:-beynunehcheh}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "20"
+      AUTH_TYPE: scram-sha-256
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # One-shot: migrate and publish static files into the shared volume, then exit.
+  # The api service waits for this to succeed.
+  release:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: prod
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput"
+    environment:
+      <<: *django-env
+      # Migrations run direct, not pooled: DDL and CREATE INDEX CONCURRENTLY
+      # cannot run inside a transaction-mode pool.
+      DATABASE_URL: postgres://${POSTGRES_USER:-beynunehcheh}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-beynunehcheh}
+    volumes:
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: prod
+    command:
+      - gunicorn
+      - beynunehcheh.asgi:application
+      - --worker-class=uvicorn.workers.UvicornWorker
+      - --workers=${API_WORKERS:-3}
+      - --bind=0.0.0.0:8000
+      - --access-logfile=-
+      - --error-logfile=-
+    environment: *django-env
+    volumes:
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      release:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/meta"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      target: prod
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://${SITE_ADDRESS:?set SITE_ADDRESS}
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      # /admin gates on source IP: it can re-queue paid reprocessing.
+      ADMIN_ALLOW_CIDR: ${ADMIN_ALLOW_CIDR:-127.0.0.1/32}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - staticfiles:/srv/static:ro
+      - media:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  staticfiles:
+  media:
+  caddy_data:
+  caddy_config:

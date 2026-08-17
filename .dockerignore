@@ -1,0 +1,16 @@
+venv/
+.venv/
+web/node_modules/
+web/.next/
+node_modules/
+__pycache__/
+*.py[cod]
+.git/
+.jj/
+db.sqlite3
+staticfiles/
+media/
+.env
+*.log
+.claude/
+docs/

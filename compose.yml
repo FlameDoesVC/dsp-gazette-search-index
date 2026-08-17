@@ -1,0 +1,104 @@
+# Development stack. Hot reload for both Django and Next.js.
+#
+#   docker compose up                  db + api
+#   docker compose --profile web up    db + api + next.js
+#   docker compose watch               same, plus rebuild on dependency changes
+#
+# Ollama is intentionally absent: inference runs on the 9070 XT box and is
+# reached over OLLAMA_URL from .env.
+
+name: beynunehcheh
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-beynunehcheh}
+      POSTGRES_USER: ${POSTGRES_USER:-beynunehcheh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-beynunehcheh}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-beynunehcheh} -d ${POSTGRES_DB:-beynunehcheh}
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: dev
+    command: python manage.py runserver 0.0.0.0:8000
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-beynunehcheh}:${POSTGRES_PASSWORD:-beynunehcheh}@db:5432/${POSTGRES_DB:-beynunehcheh}
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: "*"
+      PYTHONUNBUFFERED: "1"
+      # Enrichment runs on DeepSeek; the GPU box runs translation only.
+      # Set ENRICH_PROVIDER=ollama to keep everything on-premises.
+      ENRICH_PROVIDER: ${ENRICH_PROVIDER:-deepseek}
+      ENRICH_MODEL: ${ENRICH_MODEL:-deepseek-v4-flash}
+      ENRICH_MODEL_ESCALATION: ${ENRICH_MODEL_ESCALATION:-deepseek-v4-pro}
+      ENRICH_MODEL_LOCAL: ${ENRICH_MODEL_LOCAL:-qwen3.5:4b}
+      ENRICH_CONCURRENCY: ${ENRICH_CONCURRENCY:-8}
+      TRANSLATE_CONCURRENCY: ${TRANSLATE_CONCURRENCY:-4}
+      # Scanned-PDF transcription. Native PDF input, run via the Batch API.
+      TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-claude-haiku-4-5}
+      TRANSCRIBE_MAX_PAGES: ${TRANSCRIBE_MAX_PAGES:-10}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind mount the repo so Django's own autoreloader picks up edits.
+      - .:/app
+      # Keep the host virtualenv out of the container's way.
+      - /app/venv
+    depends_on:
+      db:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: rebuild
+          path: requirements.txt
+
+  web:
+    profiles:
+      - web
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      target: dev
+    command: npm run dev
+    environment:
+      NODE_ENV: development
+      # Browser-side calls go to the host-published API port.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Server-side calls stay on the compose network.
+      API_INTERNAL_URL: http://api:8000
+      # Uncomment if HMR misses edits (only needed on non-inotify filesystems).
+      # WATCHPACK_POLLING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web:/app
+      # Anonymous volumes so the image's install and build cache survive the
+      # bind mount above.
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
+    develop:
+      watch:
+        - action: rebuild
+          path: web/package.json
+
+volumes:
+  pgdata:

@@ -1,0 +1,38 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	handle_path /static/* {
+		root * /srv/static
+		file_server
+		header Cache-Control "public, max-age=31536000, immutable"
+	}
+
+	handle_path /media/* {
+		root * /srv/media
+		file_server
+		header Cache-Control "public, max-age=86400"
+	}
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	# The admin is the control surface for operations that spend money (marking
+	# documents stale re-queues paid reprocessing -- see spec 5.7 and 16), so it
+	# is not left as a public login page. Set ADMIN_ALLOW_CIDR to your network.
+	@admin path /admin/*
+	handle @admin {
+		@admin_denied not remote_ip {$ADMIN_ALLOW_CIDR}
+		respond @admin_denied 404
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
