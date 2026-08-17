@@ -25,7 +25,7 @@ class IulaanType(models.Model):
 
 class Iulaan(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=512)
     translated_title = models.CharField(max_length=255, blank=True)
     office = models.ForeignKey(Office, null=True, blank=True, on_delete=models.PROTECT)
     iulaan_type = models.ForeignKey(IulaanType, null=True, blank=True, on_delete=models.PROTECT)

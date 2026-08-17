@@ -39,7 +39,7 @@ class Seller(models.Model):
 class Product(models.Model):
     listing_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255)
-    url = models.URLField()
+    url = models.URLField(max_length=255)
     seller = models.ForeignKey(
         Seller, null=True, blank=True, on_delete=models.SET_NULL
     )
