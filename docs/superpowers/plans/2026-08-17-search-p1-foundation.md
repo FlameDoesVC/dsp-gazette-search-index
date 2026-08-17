@@ -2665,4 +2665,4 @@ These belong to later phases of the spec and must not be built here:
 - Dynamic shopping facets, `SpecKey`, `DocumentSpec` (P7, spec 4.4 and 8.3).
 
 One item is deliberately deferred but worth flagging when P2 starts:
-`gazette/sync_service.py:20` currently reads `MAX_INDEX_PAGES = 30 if settings.DEBUG else None`. The 5,000-listing-page target in spec 5.6.2 needs that to become an explicit setting rather than a `DEBUG` side effect, and the scrape is the long pole for the gazette corpus.
+`gazette/sync_service.py:20` currently reads `MAX_INDEX_PAGES = 2 if settings.DEBUG else None`. The 5,000-listing-page target in spec 5.6.2 needs that to become an explicit setting rather than a `DEBUG` side effect, and the scrape is the long pole for the gazette corpus.

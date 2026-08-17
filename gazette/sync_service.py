@@ -12,11 +12,11 @@ from gazette.scraper import (
     fetch_index_links,
     get_max_page_number,
 )
-from gazette.translate import translate_auto, sentence_boundary
+from core.translate import translate_auto, sentence_boundary
 
 logger = logging.getLogger(__name__)
 
-MAX_INDEX_PAGES = 30 if settings.DEBUG else None
+MAX_INDEX_PAGES = 2 if settings.DEBUG else None
 MAX_CONCURRENT_REQUESTS = 3
 TRANSLATE_CONCURRENCY = 2
 REQUEST_DELAY = 0.5

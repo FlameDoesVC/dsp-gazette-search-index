@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from gazette.models import Iulaan, IulaanType, Office
-from gazette.translate import translate_auto_sync, sentence_boundary
+from core.translate import translate_auto_sync, sentence_boundary
 
 _translate = translate_auto_sync
 
