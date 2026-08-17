@@ -15,6 +15,7 @@ from lxml import html as lxml_html
 
 from gazette.models import Iulaan
 from search.adapters.base import DocumentDraft, RawDocument
+from search.lang import translit_dv_to_latin
 
 # Spec 5.3 classification priors. Anything absent from this table becomes
 # news -- there is deliberately no `unknown` bucket.
@@ -96,6 +97,8 @@ class GazetteAdapter:
             summary_en=_summarize(body_en),
             text_dv=text_dv,
             text_en=text_en,
+            title_latin=translit_dv_to_latin(i.title or ""),
+            text_latin=translit_dv_to_latin(text_dv),
             attrs={
                 "office": office_en,
                 "office_dv": office_dv,

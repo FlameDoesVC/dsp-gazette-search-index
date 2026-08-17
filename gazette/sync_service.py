@@ -16,7 +16,7 @@ from core.translate import translate_auto, sentence_boundary
 
 logger = logging.getLogger(__name__)
 
-MAX_INDEX_PAGES = 2 if settings.DEBUG else None
+MAX_INDEX_PAGES = 2 if settings.DEBUG else 3500
 MAX_CONCURRENT_REQUESTS = 3
 TRANSLATE_CONCURRENCY = 2
 REQUEST_DELAY = 0.5

@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Iterable
 
-from django.contrib.postgres.search import SearchVector
-from django.db import transaction
-from django.db.models import Q
+from django.conf import settings
+from django.db import connection, transaction
 
 from search.adapters import base
 from search.adapters.base import DocumentDraft
+from search.lang import normalize_text, strip_fili, translit_dv_to_latin
 from search.models import SearchDocument
 
 logger = logging.getLogger(__name__)
@@ -65,38 +65,110 @@ def upsert_drafts(drafts: Iterable[DocumentDraft]) -> int:
 
     Returns the number of drafts written.
     """
-    batch = [_row(d) for d in drafts]
-    if not batch:
+    materialized = list(drafts)
+    if not materialized:
         return 0
 
     with transaction.atomic():
         SearchDocument.objects.bulk_create(
-            batch,
+            [_row(d) for d in materialized],
             update_conflicts=True,
             unique_fields=["source", "source_key"],
             update_fields=_UPDATE_FIELDS,
             batch_size=500,
         )
-        _rebuild_vectors(batch)
-    return len(batch)
+        _rebuild_vectors(materialized)
+    return len(materialized)
 
 
-def _rebuild_vectors(batch: list[SearchDocument]) -> None:
-    """Build tsvectors from title and summary only.
+_VECTOR_SQL = """
+UPDATE search_searchdocument AS d SET
+    vector_en    = setweight(to_tsvector('english', v.title_en), 'A')
+                || setweight(to_tsvector('english',
+                        v.text_en || ' ' || v.summary_en), 'B'),
+    vector_dv    = {dv_expr},
+    vector_latin = setweight(to_tsvector('simple', v.title_latin), 'A')
+                || setweight(to_tsvector('simple', v.text_latin), 'B'),
+    title_latin  = v.title_latin
+FROM (VALUES {values}) AS v(
+    source, source_key, title_en, text_en, summary_en,
+    title_dv, text_dv, title_dv_skel, text_dv_skel,
+    title_latin, text_latin
+)
+WHERE d.source = v.source AND d.source_key = v.source_key
+"""
 
-    P1 populates `vector_en`. `vector_dv` and `vector_latin` are written by P2,
-    once the Dhivehi normalization pipeline exists -- writing them here with the
-    wrong analysis would have to be undone.
-    """
-    keys = Q()
-    for row in batch:
-        keys |= Q(source=row.source, source_key=row.source_key)
-    SearchDocument.objects.filter(keys).update(
-        vector_en=(
-            SearchVector("title_en", weight="A", config="english")
-            + SearchVector("summary_en", weight="B", config="english")
-        )
+# Dual weighting (spec 6.2): fili-preserved at A so an exactly-typed query
+# outranks a skeleton collision, skeleton at C so a mis-typed one still
+# matches. The two alternatives exist so the strategy is a settings change
+# plus a reindex, never a migration.
+_DV_EXPRS = {
+    "dual": (
+        "setweight(to_tsvector('simple', v.title_dv), 'A') "
+        "|| setweight(to_tsvector('simple', v.text_dv), 'B') "
+        "|| setweight(to_tsvector('simple', v.title_dv_skel), 'C') "
+        "|| setweight(to_tsvector('simple', v.text_dv_skel), 'C')"
+    ),
+    "fili": (
+        "setweight(to_tsvector('simple', v.title_dv), 'A') "
+        "|| setweight(to_tsvector('simple', v.text_dv), 'B')"
+    ),
+    "skeleton": (
+        "setweight(to_tsvector('simple', v.title_dv_skel), 'A') "
+        "|| setweight(to_tsvector('simple', v.text_dv_skel), 'B')"
+    ),
+}
+
+
+def _vector_params(draft: DocumentDraft) -> tuple:
+    title_dv = normalize_text(draft.title_dv)
+    text_dv = normalize_text(draft.text_dv)
+    # Thaana documents get a Latin probe for free; a document that is already
+    # Latin keeps whatever the adapter supplied.
+    title_latin = normalize_text(
+        draft.title_latin or (translit_dv_to_latin(title_dv) if title_dv else "")
     )
+    text_latin = normalize_text(
+        draft.text_latin or (translit_dv_to_latin(text_dv) if text_dv else "")
+    )
+    return (
+        draft.source,
+        draft.source_key,
+        normalize_text(draft.title_en),
+        normalize_text(draft.text_en),
+        normalize_text(draft.summary_en),
+        title_dv,
+        text_dv,
+        strip_fili(title_dv),
+        strip_fili(text_dv),
+        title_latin,
+        text_latin,
+    )
+
+
+def _rebuild_vectors(drafts: list[DocumentDraft]) -> None:
+    """Build every vector in one statement per batch.
+
+    A VALUES join rather than per-row updates: the text these vectors are
+    built from is never stored (spec 12.1), so it has to be supplied at index
+    time, and one round trip per batch keeps that affordable.
+    """
+    if not drafts:
+        return
+    mode = getattr(settings, "SEARCH_DV_INDEX_MODE", "dual")
+    dv_expr = _DV_EXPRS.get(mode, _DV_EXPRS["dual"])
+
+    rows = [_vector_params(d) for d in drafts]
+    placeholder = "(" + ", ".join(["%s"] * 11) + ")"
+    values = ", ".join([placeholder] * len(rows))
+    sql = _VECTOR_SQL.format(dv_expr=dv_expr, values=values)
+
+    params: list = []
+    for row in rows:
+        params.extend(row)
+
+    with connection.cursor() as cur:
+        cur.execute(sql, params)
 
 
 def reindex_source(
