@@ -140,6 +140,20 @@ def test_dates_normalize_to_iso(text, iso):
     assert iso in extract_candidates(text).dates
 
 
+@pytest.mark.parametrize(
+    "text,iso",
+    [
+        ("23 އޮގަސްޓް 2026 13:00", "2026-08-23"),
+        ("11 ސެޕްޓެންބަރު 2026", "2026-09-11"),
+        ("6 އޮކްޓޫބަރު 2026", "2026-10-06"),
+    ],
+)
+def test_day_first_dhivehi_dates_parse(text, iso):
+    """The corpus writes day-month-year. The original pattern expected
+    year-month-day and matched nothing at all."""
+    assert iso in extract_candidates(text).dates
+
+
 # --- normalization helpers used by the adapters -------------------------
 
 @pytest.mark.parametrize(

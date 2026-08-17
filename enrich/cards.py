@@ -96,6 +96,7 @@ def _job_card(a, base: dict) -> dict:
         "grade": a.grade,
         "location": base.get("location", ""),
         "position_type": a.position_type,
+        "required_documents": a.required_documents,
         # raw date only; state is computed at query time
         "deadline": a.deadline,
         "apply_kinds": [m.kind for m in a.apply_methods],

@@ -82,3 +82,9 @@ def test_property_and_shopping_and_news_construct():
     ShoppingAttrs(condition="used", brand="Apple",
                   specs=[{"key_raw": "voltage", "value_num": 24, "unit": "V"}])
     NewsAttrs(office="Ministry of Example", is_tender=True)
+
+
+def test_job_attrs_carries_required_documents():
+    j = JobAttrs(required_documents=["ID card copy", "Accredited certificates"])
+    assert len(j.required_documents) == 2
+    assert JobAttrs().required_documents == []

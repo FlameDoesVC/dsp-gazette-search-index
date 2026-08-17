@@ -88,6 +88,7 @@ class JobAttrs(_Base):
     grade: str = ""                # civil service rank: GS3, MS1
     compensation: Compensation = Field(default_factory=Compensation)
     qualifications: list[str] = Field(default_factory=list)
+    required_documents: list[str] = Field(default_factory=list)
     experience_years: float | None = None
     deadline: str = ""             # ISO date; validated in validate.py
     apply_methods: list[ApplyMethod] = Field(default_factory=list)

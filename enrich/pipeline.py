@@ -51,9 +51,16 @@ class EnrichInput:
 
 
 def _gazette_scraped(iulaan) -> dict:
+    from search.extract.dates import parse_dv_datetime
+
+    info = iulaan.additional_info or {}
+    deadline = parse_dv_datetime(info.get("ސުންގަޑި", ""))
     return {
         "office": iulaan.office.name if iulaan.office else "",
         "announcement_type": iulaan.iulaan_type.name if iulaan.iulaan_type else "",
+        "reference_no": info.get("ނަންބަރު", ""),
+        # Scraped fields win. The model may fill a null, never overwrite.
+        "deadline": deadline.date().isoformat() if deadline else "",
     }
 
 

@@ -20,6 +20,16 @@ from enrich.schemas import Compensation
 HOURS_PER_DAY = 8
 
 
+def _describes_multiple_ranks(comp: Compensation) -> bool:
+    """A pay band plus duplicate allowance kinds means these line items belong
+    to two different ranks advertised in one notice. Summing them invents a
+    salary nobody offers."""
+    if not comp.basic_salary_max:
+        return False
+    kinds = [a.kind for a in comp.allowances if a.amount is not None]
+    return len(kinds) != len(set(kinds))
+
+
 @dataclass(slots=True)
 class NetEstimate:
     value: float
@@ -58,6 +68,11 @@ def estimate_net(comp: Compensation, working_days: int | None = None) -> NetEsti
     if comp.basic_salary is None:
         return None
     if comp.period != "month":
+        return None
+
+    if _describes_multiple_ranks(comp):
+        # Report the stated band and refuse to compute. `salary_display`
+        # already renders 'MVR 18,129 - 20,004 / month', which is true.
         return None
 
     basic = float(comp.basic_salary)

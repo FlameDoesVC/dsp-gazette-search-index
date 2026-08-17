@@ -17,6 +17,8 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from search.extract.dates import parse_dv_month
+
 # Maldivian numbers are seven digits: mobile starts 7 or 9, landline 3 or 6.
 # The +960 prefix is optional and the number is frequently embedded in a title
 # with no separator, hence the explicit boundary guards rather than \b (which
@@ -53,24 +55,13 @@ _UNIT = re.compile(
     r"(?![A-Za-z])"
 )
 
-_DV_MONTHS = {
-    "ޖެނުއަރީ": 1, "ފެބްރުއަރީ": 2, "މާރިޗު": 3, "މާރޗް": 3, "އޭޕްރީލް": 4,
-    "މެއި": 5, "މޭ": 5, "ޖޫން": 6, "ޖުލައި": 7, "އޯގަސްޓް": 8, "އޮގަސްޓް": 8,
-    "ސެޕްޓެމްބަރ": 9, "އޮކްޓޯބަރ": 10, "ނޮވެމްބަރ": 11, "ޑިސެމްބަރ": 12,
-}
-_EN_MONTHS = {
-    m.lower(): i
-    for i, m in enumerate(
-        ["January", "February", "March", "April", "May", "June", "July",
-         "August", "September", "October", "November", "December"], start=1
-    )
-}
-_EN_MONTHS.update({m[:3]: i for m, i in list(_EN_MONTHS.items())})
-
 _ISO_DATE = re.compile(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})")
 _DMY_DATE = re.compile(r"(\d{1,2})[-/](\d{1,2})[-/](20\d{2})")
 _EN_TEXT_DATE = re.compile(r"(\d{1,2})\s+([A-Za-z]{3,9})\s+(20\d{2})")
-_DV_TEXT_DATE = re.compile(r"(20\d{2})\s+([ހ-޿]+)\s+(\d{1,2})")
+# day-first, which is what Maldivian sources actually write
+_DV_TEXT_DATE = re.compile(r"(\d{1,2})\s+([ހ-޿]+)\s+(20\d{2})")
+# year-month-day also occurs in the wild; keep both orders working
+_DV_YMD_TEXT_DATE = re.compile(r"(20\d{2})\s+([ހ-޿]+)\s+(\d{1,2})")
 
 _COUNT = re.compile(r"^\s*(\d+)\s*(?:rooms?|bedrooms?|baths?|bathrooms?)?"
                     r"\s*(and\s+more)?\s*$", re.I)
@@ -160,11 +151,15 @@ def _extract_dates(text: str) -> list[str]:
     for d, mo, y in _DMY_DATE.findall(text):
         push(y, mo, d)
     for d, name, y in _EN_TEXT_DATE.findall(text):
-        mo = _EN_MONTHS.get(name.lower()) or _EN_MONTHS.get(name.lower()[:3])
+        mo = parse_dv_month(name)
         if mo:
             push(y, mo, d)
-    for y, name, d in _DV_TEXT_DATE.findall(text):
-        mo = _DV_MONTHS.get(name)
+    for d, name, y in _DV_TEXT_DATE.findall(text):
+        mo = parse_dv_month(name)
+        if mo:
+            push(y, mo, d)
+    for y, name, d in _DV_YMD_TEXT_DATE.findall(text):
+        mo = parse_dv_month(name)
         if mo:
             push(y, mo, d)
     return _dedup(out)

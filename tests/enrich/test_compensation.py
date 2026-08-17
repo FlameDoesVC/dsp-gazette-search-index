@@ -112,6 +112,39 @@ def test_breakdown_shows_the_arithmetic():
     ]
 
 
+def test_a_banded_posting_with_duplicate_allowances_refuses_to_estimate():
+    """Real record gazette:407587 -- one iulaan, two ranks. Summing both
+    ranks' allowances onto the lower basic produced MVR 51,787 against a real
+    figure near 34,000. No estimate beats a fabricated one."""
+    comp = Compensation(
+        basic_salary=18129, basic_salary_max=20004, salary_state="listed",
+        completeness="full",
+        allowances=[
+            Allowance(kind="other", label_raw="Position Allowance",
+                      amount=10382, basis="fixed_monthly"),
+            Allowance(kind="other", label_raw="Position Allowance",
+                      amount=11456, basis="fixed_monthly"),
+            Allowance(kind="attendance", label_raw="Attendance (per day)",
+                      amount=281, basis="per_day"),
+            Allowance(kind="attendance", label_raw="Attendance (per day)",
+                      amount=310, basis="per_day"),
+        ],
+    )
+    assert estimate_net(comp) is None
+    assert salary_display(comp) == "MVR 18,129 - 20,004 / month"
+
+
+def test_a_band_with_distinct_allowance_kinds_still_estimates():
+    """A genuine grade band with one allowance each is not two ranks."""
+    comp = Compensation(
+        basic_salary=8000, basic_salary_max=9000, salary_state="listed",
+        completeness="full", pension_applies=True,
+        allowances=[Allowance(kind="living", label_raw="Living", amount=1000,
+                              basis="fixed_monthly")],
+    )
+    assert estimate_net(comp) is not None
+
+
 @pytest.mark.parametrize(
     "comp,expected",
     [

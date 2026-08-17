@@ -15,8 +15,15 @@ from lxml import html as lxml_html
 
 from gazette.models import Iulaan
 from search.adapters.base import DocumentDraft, RawDocument
+from search.extract.dates import parse_dv_datetime
 from search.extract.tables import parse_label_value_pairs
 from search.lang import translit_dv_to_latin
+
+# additional_info keys, present on 100% of the corpus.
+_K_REFERENCE = "ނަންބަރު"
+_K_DEADLINE = "ސުންގަޑި"
+_K_PUBLISHED_DATE = "ޕަބްލިޝްކުރި ތާރީޚު"
+_K_PUBLISHED_TIME = "ޕަބްލިޝްކުރި ގަޑި"
 
 # Spec 5.3 classification priors. Anything absent from this table becomes
 # news -- there is deliberately no `unknown` bucket.
@@ -91,6 +98,17 @@ class GazetteAdapter:
         office_en = (i.office.translated_name or i.office.name) if i.office else ""
         office_dv = i.office.name if i.office else ""
 
+        info = i.additional_info or {}
+        published_at = parse_dv_datetime(
+            info.get(_K_PUBLISHED_DATE, ""),
+            time_str=info.get(_K_PUBLISHED_TIME, ""),
+        )
+        # Deterministic, never model-derived: the gazette states this on every
+        # posting, which makes it ground truth (spec 5.2 layer 4). A vacancy
+        # closing because an LLM misread a date is not an acceptable failure.
+        expires_at = parse_dv_datetime(info.get(_K_DEADLINE, ""))
+        reference_no = info.get(_K_REFERENCE, "")
+
         attachments = raw.payload.get("attachments", [])
         attachment_text = "\n".join(a.text for a in attachments)
         transcribed = any(a.transcribed for a in attachments)
@@ -120,6 +138,8 @@ class GazetteAdapter:
             text_en=text_en,
             title_latin=translit_dv_to_latin(i.title or ""),
             text_latin=translit_dv_to_latin(text_dv),
+            published_at=published_at,
+            expires_at=expires_at,
             attrs={
                 "office": office_en,
                 "office_dv": office_dv,
@@ -128,6 +148,7 @@ class GazetteAdapter:
                 "attachment_count": len(i.attachments or {}),
                 "table_pairs": pairs,
                 "transcribed": transcribed,
+                "reference_no": reference_no,
             },
             card={
                 "source": self.key,
@@ -138,6 +159,7 @@ class GazetteAdapter:
                 "attachment_count": len(i.attachments or {}),
                 "detail_source": "attachment" if attachment_text else "listing",
                 "transcribed": transcribed,
+                "deadline": expires_at.isoformat() if expires_at else None,
             },
             quality=_quality(body_dv, i, attachments, transcribed),
             content_hash=hashlib.sha256(

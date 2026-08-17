@@ -29,9 +29,31 @@ def gazette_job(db):
     o = Office.objects.create(name="Ministry of Example")
     return Iulaan.objects.create(
         id="IUL-1", title="އެޑްމިނިސްޓްރޭޓިވް އޮފިސަރ", office=o, iulaan_type=t,
-        additional_info={}, attachments=[],
+        additional_info={
+            "ނަންބަރު": "CS-IUL/2026/00173",
+            "ސުންގަޑި": "23 އޮގަސްޓް 2026 13:00",
+            "ޕަބްލިޝްކުރި ތާރީޚު": "16 އޮގަސްޓް 2026",
+            "ޕަބްލިޝްކުރި ގަޑި": "14:12",
+        },
+        attachments=[],
         body="އަސާސީ މުސާރަ: މަހަކު 10,750 ރުފިޔާ ފޯނު: 3323838",
     )
+
+
+@pytest.mark.django_db
+def test_the_scraped_deadline_is_passed_to_the_model_as_truth(gazette_job):
+    inp = build_input("gazette", "IUL-1")
+    assert inp.scraped["deadline"] == "2026-08-23"
+
+
+@pytest.mark.django_db
+def test_the_model_cannot_overwrite_the_scraped_deadline(gazette_job):
+    inp = build_input("gazette", "IUL-1")
+    client = _StubClient({"doc_type": "job",
+                          "attrs": {"deadline": "2027-01-01"}})
+    rec = async_to_sync(enrich_one)(inp, client)
+    assert rec.attrs["deadline"] == "2026-08-23"
+    assert rec.status == "needs_review"
 
 
 @pytest.mark.django_db

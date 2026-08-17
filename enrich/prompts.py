@@ -22,7 +22,7 @@ from enrich.schemas import ATTRS_FOR_TYPE, schema_text
 # Bump when the instructions or the schemas change in a way that would produce
 # different output. Spec 4.2: a bump re-enriches iBay, and deliberately does
 # NOT backfill gazette (spec 5.7).
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 
 _ALL_SCHEMAS = json.dumps(
     {t: json.loads(schema_text(t)) for t in sorted(ATTRS_FOR_TYPE)},
@@ -61,6 +61,10 @@ fits, use news.
 characters each. For a news document the summary is the entire product, so make \
 it say what actually happened, not what kind of document it is. Leave the \
 Dhivehi fields empty if the source has no Dhivehi.
+9. `required_documents` lists what an applicant must attach -- ID copy, \
+accredited certificates, CV, reference letters, police report. One short \
+string each, copied from the source. It is not the same as `qualifications`, \
+which describes the person; this describes the paperwork.
 
 Return an object with exactly these keys:
   doc_type, doc_type_confidence, canonical_title_en, canonical_title_dv,

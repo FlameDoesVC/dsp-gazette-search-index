@@ -569,6 +569,676 @@ jj commit -m "P5 task 0: fix three P3 defects (no-transcribe trap, batch flush, 
 
 ---
 
+### Task 0B: Gazette dates, job deadlines, and deadline visibility
+
+**Do this immediately after Task 0.** The API's job filtering depends on it and
+so does every job card.
+
+A job whose deadline has passed is not a job. Right now nothing in the system
+knows when any gazette deadline is, even though the gazette states it on every
+single posting.
+
+**Measured on the corpus, 2026-08-18:**
+
+```
+job iulaan: 93,  with a ސުންގަޑި (deadline) field: 93   -- 100% coverage
+additional_info keys, all at 93/93:
+  ނަންބަރު              reference number
+  ސުންގަޑި               deadline          '23 އޮގަސްޓް 2026 13:00'
+  ޕަބްލިޝްކުރި ތާރީޚު      published date    '16 އޮގަސްޓް 2026'
+  ޕަބްލިޝްކުރި ގަޑި        published time    '14:12'
+```
+
+Three separate defects keep that from reaching a card, all of them mine:
+
+1. **The gazette adapter never reads `additional_info`.** It passes the dict
+   into the payload and stops, so `published_at` and `expires_at` are null on
+   every gazette document. Freshness decay (spec 7) is therefore inert for the
+   entire gazette corpus — the 7-day news and 14-day job half-lives currently
+   do nothing.
+2. **`extract_candidates` cannot parse the date format.** `_DV_TEXT_DATE` is
+   `(20\d{2})\s+([ހ-޿]+)\s+(\d{1,2})` — year, month, day. The gazette writes
+   **day, month, year, time**. Verified:
+   `extract_candidates('23 އޮގަސްޓް 2026 13:00').dates == []`. That is why
+   `attrs.deadline` came back `""` on the end-to-end test record.
+3. **The month table has the wrong spellings.** `_DV_MONTHS` contains
+   `ސެޕްޓެމްބަރ` and `އޮކްޓޯބަރ`; the corpus contains `ސެޕްޓެންބަރު` (11
+   occurrences) and `އޮކްޓޫބަރު` (6). Nasal `ން` versus `މް`, and a trailing
+   `ު`. Exact-string month matching is the wrong technique for a language with
+   competing orthographic conventions, so this task replaces it with prefix
+   matching on an unambiguous stem.
+
+**The deadline must never come from the model.** It is a scraped field with
+100% coverage, which makes it ground truth under spec 5.2 layer 4 — the model
+may fill a null, never overwrite. Parsing it deterministically also means a
+closed vacancy cannot be advertised as open because an LLM misread a date.
+
+**Files:**
+- Create: `search/extract/dates.py`
+- Modify: `search/adapters/gazette.py`, `enrich/preextract.py`, `enrich/pipeline.py`, `enrich/schemas.py`, `enrich/cards.py`, `search/facets.py`, `search/query.py`
+- Test: `search/tests/test_gazette_dates.py`, `search/tests/test_adapter_gazette.py`, `tests/enrich/test_preextract.py`
+
+**Interfaces:**
+- Produces: `DV_MONTHS`, `parse_dv_month(token) -> int | None`,
+  `parse_dv_datetime(s, *, time_str="") -> datetime | None`,
+  `JobAttrs.required_documents`, the `deadline` facet.
+
+- [ ] **Step 1: Write the failing test for the date parser**
+
+`search/tests/test_gazette_dates.py`:
+
+```python
+import datetime as dt
+
+import pytest
+
+from search.extract.dates import parse_dv_datetime, parse_dv_month
+
+
+@pytest.mark.parametrize(
+    "token,month",
+    [
+        # Spellings that actually occur in the corpus.
+        ("އޮގަސްޓް", 8),
+        ("ސެޕްޓެންބަރު", 9),
+        ("އޮކްޓޫބަރު", 10),
+        # Competing conventions for the same months. Nasal `ން` vs `މް`, and a
+        # trailing `ު`. Both are correct Dhivehi; exact matching cannot win.
+        ("ސެޕްޓެމްބަރު", 9),
+        ("ސެޕްޓެމްބަރ", 9),
+        ("އޮކްޓޯބަރު", 10),
+        ("ނޮވެންބަރު", 11),
+        ("ނޮވެމްބަރ", 11),
+        ("ޑިސެންބަރު", 12),
+        ("ޑިސެމްބަރ", 12),
+        ("ޖެނުއަރީ", 1),
+        ("ފެބްރުއަރީ", 2),
+        ("މާރިޗު", 3),
+        ("މާރޗް", 3),
+        ("އޭޕްރީލް", 4),
+        ("އެޕްރީލް", 4),
+        ("މެއި", 5),
+        ("މޭ", 5),
+        ("ޖޫން", 6),
+        ("ޖުލައި", 7),
+        ("އޯގަސްޓް", 8),
+    ],
+)
+def test_every_month_spelling_the_corpus_can_produce(token, month):
+    assert parse_dv_month(token) == month
+
+
+def test_an_unknown_token_is_none_not_a_guess():
+    assert parse_dv_month("ބީލަން") is None
+    assert parse_dv_month("") is None
+
+
+def test_the_real_deadline_format():
+    """'23 އޮގަސްޓް 2026 13:00' -- day, month, year, time. The old regex
+    expected year-month-day and silently matched nothing."""
+    got = parse_dv_datetime("23 އޮގަސްޓް 2026 13:00")
+    assert got.date() == dt.date(2026, 8, 23)
+    assert (got.hour, got.minute) == (13, 0)
+
+
+def test_a_date_with_the_time_in_a_separate_field():
+    got = parse_dv_datetime("16 އޮގަސްޓް 2026", time_str="14:12")
+    assert got.date() == dt.date(2026, 8, 16)
+    assert (got.hour, got.minute) == (14, 12)
+
+
+def test_a_date_with_no_time_defaults_to_end_of_day():
+    """A deadline of '17 August' has not passed at 09:00 on the 17th."""
+    got = parse_dv_datetime("17 އޮގަސްޓް 2026")
+    assert got.date() == dt.date(2026, 8, 17)
+    assert (got.hour, got.minute) == (23, 59)
+
+
+def test_midnight_is_preserved_and_not_treated_as_missing():
+    """'17 އޮގަސްޓް 2026 00:00' occurs in the corpus and means midnight,
+    not 'no time given'."""
+    got = parse_dv_datetime("17 އޮގަސްޓް 2026 00:00")
+    assert (got.hour, got.minute) == (0, 0)
+
+
+def test_the_result_is_timezone_aware():
+    from django.utils import timezone
+    got = parse_dv_datetime("23 އޮގަސްޓް 2026 13:00")
+    assert timezone.is_aware(got)
+
+
+@pytest.mark.parametrize(
+    "bad", ["", "not a date", "23 2026", "99 އޮގަސްޓް 2026", "23 އޮގަސްޓް 1026"]
+)
+def test_garbage_returns_none_rather_than_a_wrong_date(bad):
+    assert parse_dv_datetime(bad) is None
+
+
+def test_a_latin_month_also_parses():
+    """Some offices publish in English."""
+    got = parse_dv_datetime("23 August 2026 13:00")
+    assert got.date() == dt.date(2026, 8, 23)
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `pytest search/tests/test_gazette_dates.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'search.extract.dates'`
+
+- [ ] **Step 3: Write the parser**
+
+`search/extract/dates.py`:
+
+```python
+"""Dhivehi and English date parsing for gazette metadata.
+
+Month names are matched by **prefix**, not by exact string. Dhivehi has
+competing orthographic conventions for the borrowed month names -- the corpus
+contains `ސެޕްޓެންބަރު` while other sources write `ސެޕްޓެމްބަރު` or
+`ސެޕްޓެމްބަރ`, differing in nasal `ން` versus `މް` and a trailing `ު`. An exact
+table gets one variant right and silently drops the rest, which is precisely
+what happened: the previous table matched neither spelling the corpus uses.
+
+Each stem below is unambiguous across all twelve months, so prefix matching
+cannot collide.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import re
+
+from django.utils import timezone
+
+# stem -> month. Ordered longest-first at match time so `މާރ` cannot shadow a
+# longer stem. No two stems are prefixes of one another.
+DV_MONTH_STEMS = {
+    "ޖެނު": 1,
+    "ފެބް": 2,
+    "މާރ": 3,
+    "އޭޕް": 4, "އެޕް": 4,
+    "މެއި": 5, "މޭ": 5,
+    "ޖޫން": 6,
+    "ޖުލަ": 7,
+    "އޮގަ": 8, "އޯގަ": 8,
+    "ސެޕް": 9,
+    "އޮކް": 10,
+    "ނޮވ": 11,
+    "ޑިސ": 12,
+}
+
+EN_MONTH_STEMS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+# day, month-word, 4-digit year, optional HH:MM
+_DMY = re.compile(
+    r"(\d{1,2})\s+([^\s\d]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?"
+)
+_TIME = re.compile(r"(\d{1,2}):(\d{2})")
+
+MIN_YEAR = 1990
+MAX_YEAR = 2100
+
+
+def parse_dv_month(token: str) -> int | None:
+    token = (token or "").strip()
+    if not token:
+        return None
+    for stem, month in sorted(DV_MONTH_STEMS.items(), key=lambda kv: -len(kv[0])):
+        if token.startswith(stem):
+            return month
+    low = token.lower()
+    for stem, month in EN_MONTH_STEMS.items():
+        if low.startswith(stem):
+            return month
+    return None
+
+
+def parse_dv_datetime(s: str, *, time_str: str = "") -> dt.datetime | None:
+    """Parse `23 އޮގަސްޓް 2026 13:00` and friends into an aware datetime.
+
+    A date with no time at all becomes 23:59 local: a deadline of "17 August"
+    has not passed at 09:00 on the 17th, and defaulting to midnight would
+    close every such vacancy a day early. An explicit `00:00` is preserved.
+    """
+    if not s:
+        return None
+    match = _DMY.search(s)
+    if not match:
+        return None
+
+    day_s, month_token, year_s, hh, mm = match.groups()
+    month = parse_dv_month(month_token)
+    if month is None:
+        return None
+
+    day, year = int(day_s), int(year_s)
+    if not (MIN_YEAR <= year <= MAX_YEAR):
+        return None
+
+    if hh is None and time_str:
+        t = _TIME.search(time_str)
+        if t:
+            hh, mm = t.groups()
+
+    if hh is None:
+        hour, minute = 23, 59
+    else:
+        hour, minute = int(hh), int(mm)
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            return None
+
+    try:
+        naive = dt.datetime(year, month, day, hour, minute)
+    except ValueError:          # 31 February and similar
+        return None
+    return timezone.make_aware(naive)
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Run: `pytest search/tests/test_gazette_dates.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Write the failing adapter test**
+
+Add to `search/tests/test_adapter_gazette.py`:
+
+```python
+GAZETTE_META = {
+    "ނަންބަރު": "CS-IUL/2026/00173",
+    "ސުންގަޑި": "23 އޮގަސްޓް 2026 13:00",
+    "ޕަބްލިޝްކުރި ތާރީޚު": "16 އޮގަސްޓް 2026",
+    "ޕަބްލިޝްކުރި ގަޑި": "14:12",
+}
+
+
+@pytest.mark.django_db
+def test_the_adapter_reads_published_and_deadline_from_additional_info():
+    """100% of job iulaan carry these. Leaving them unread made freshness
+    decay inert for the whole gazette corpus and left every job undated."""
+    import datetime as dt
+    iulaan = Iulaan.objects.create(
+        id="IUL-1", title="މެޑިކަލް އޮފިސަރ", additional_info=GAZETTE_META,
+        attachments=[], body="body",
+    )
+    adapter = GazetteAdapter()
+    draft = adapter.to_document(adapter.fetch_raw("IUL-1"))
+
+    assert draft.published_at.date() == dt.date(2026, 8, 16)
+    assert draft.published_at.hour == 14
+    assert draft.expires_at.date() == dt.date(2026, 8, 23)
+    assert draft.expires_at.hour == 13
+
+
+@pytest.mark.django_db
+def test_the_raw_deadline_reaches_the_card_but_no_computed_state():
+    """Spec 8: card carries the raw date; deadline_state is computed per
+    request, because a gazette document is written once and never revisited."""
+    Iulaan.objects.create(id="IUL-1", title="t", additional_info=GAZETTE_META,
+                          attachments=[], body="b")
+    adapter = GazetteAdapter()
+    draft = adapter.to_document(adapter.fetch_raw("IUL-1"))
+
+    assert draft.card["deadline"].startswith("2026-08-23")
+    assert "deadline_state" not in draft.card
+    assert "days_left" not in draft.card
+
+
+@pytest.mark.django_db
+def test_the_reference_number_is_carried_through():
+    Iulaan.objects.create(id="IUL-1", title="t", additional_info=GAZETTE_META,
+                          attachments=[], body="b")
+    adapter = GazetteAdapter()
+    draft = adapter.to_document(adapter.fetch_raw("IUL-1"))
+    assert draft.attrs["reference_no"] == "CS-IUL/2026/00173"
+
+
+@pytest.mark.django_db
+def test_missing_metadata_is_not_an_error():
+    Iulaan.objects.create(id="IUL-2", title="t", additional_info={},
+                          attachments=[], body="b")
+    adapter = GazetteAdapter()
+    draft = adapter.to_document(adapter.fetch_raw("IUL-2"))
+    assert draft.expires_at is None
+    assert draft.published_at is None
+```
+
+- [ ] **Step 6: Wire it into the adapter**
+
+In `search/adapters/gazette.py`, add the import and the field mapping. The keys
+are Dhivehi literals; name them so the mapping is readable:
+
+```python
+from search.extract.dates import parse_dv_datetime
+
+# additional_info keys, present on 100% of the corpus.
+_K_REFERENCE = "ނަންބަރު"
+_K_DEADLINE = "ސުންގަޑި"
+_K_PUBLISHED_DATE = "ޕަބްލިޝްކުރި ތާރީޚު"
+_K_PUBLISHED_TIME = "ޕަބްލިޝްކުރި ގަޑި"
+```
+
+and inside `to_document`, before building the draft:
+
+```python
+        info = i.additional_info or {}
+        published_at = parse_dv_datetime(
+            info.get(_K_PUBLISHED_DATE, ""),
+            time_str=info.get(_K_PUBLISHED_TIME, ""),
+        )
+        # Deterministic, never model-derived: the gazette states this on every
+        # posting, which makes it ground truth (spec 5.2 layer 4). A vacancy
+        # closing because an LLM misread a date is not an acceptable failure.
+        expires_at = parse_dv_datetime(info.get(_K_DEADLINE, ""))
+        reference_no = info.get(_K_REFERENCE, "")
+```
+
+Pass `published_at=published_at, expires_at=expires_at` to the `DocumentDraft`,
+add `"reference_no": reference_no` to `attrs`, and add
+`"deadline": expires_at.isoformat() if expires_at else None` to `card`.
+
+- [ ] **Step 7: Make the deadline scraped truth for enrichment**
+
+In `enrich/pipeline.py`, extend `_gazette_scraped`:
+
+```python
+def _gazette_scraped(iulaan) -> dict:
+    from search.extract.dates import parse_dv_datetime
+
+    info = iulaan.additional_info or {}
+    deadline = parse_dv_datetime(info.get("ސުންގަޑި", ""))
+    return {
+        "office": iulaan.office.name if iulaan.office else "",
+        "announcement_type": iulaan.iulaan_type.name if iulaan.iulaan_type else "",
+        "reference_no": info.get("ނަންބަރު", ""),
+        # Scraped fields win. The model may fill a null, never overwrite.
+        "deadline": deadline.date().isoformat() if deadline else "",
+    }
+```
+
+Add to `tests/enrich/test_pipeline.py`:
+
+```python
+@pytest.mark.django_db
+def test_the_scraped_deadline_is_passed_to_the_model_as_truth(gazette_job):
+    inp = build_input("gazette", "IUL-1")
+    assert inp.scraped["deadline"] == "2026-08-23"
+
+
+@pytest.mark.django_db
+def test_the_model_cannot_overwrite_the_scraped_deadline(gazette_job):
+    inp = build_input("gazette", "IUL-1")
+    client = _StubClient({"doc_type": "job",
+                          "attrs": {"deadline": "2027-01-01"}})
+    rec = async_to_sync(enrich_one)(inp, client)
+    assert rec.attrs["deadline"] == "2026-08-23"
+    assert rec.status == "needs_review"
+```
+
+The `gazette_job` fixture needs `additional_info` populated with `GAZETTE_META`
+rather than `{}`.
+
+- [ ] **Step 8: Fix the date regex and month table in `preextract.py`**
+
+The gazette path no longer depends on this, but iBay `Apply Before` values and
+attachment body text still run through it, and it is currently wrong for both
+day-first dates and two of the three month spellings the corpus uses.
+
+Replace `_DV_MONTHS` and the `_DV_TEXT_DATE` handling with a call into the new
+module, so there is one month table in the codebase rather than two:
+
+```python
+from search.extract.dates import parse_dv_month
+
+# day-first, which is what Maldivian sources actually write
+_DV_TEXT_DATE = re.compile(r"(\d{1,2})\s+([ހ-޿]+)\s+(20\d{2})")
+```
+
+and in `_extract_dates`:
+
+```python
+    for d, name, y in _DV_TEXT_DATE.findall(text):
+        mo = parse_dv_month(name)
+        if mo:
+            push(y, mo, d)
+```
+
+Add to `tests/enrich/test_preextract.py`:
+
+```python
+@pytest.mark.parametrize(
+    "text,iso",
+    [
+        ("23 އޮގަސްޓް 2026 13:00", "2026-08-23"),
+        ("11 ސެޕްޓެންބަރު 2026", "2026-09-11"),
+        ("6 އޮކްޓޫބަރު 2026", "2026-10-06"),
+    ],
+)
+def test_day_first_dhivehi_dates_parse(text, iso):
+    """The corpus writes day-month-year. The original pattern expected
+    year-month-day and matched nothing at all."""
+    assert iso in extract_candidates(text).dates
+```
+
+Keep the existing year-first test case if one exists — both orders should work.
+
+- [ ] **Step 9: Add `required_documents` to `JobAttrs`**
+
+Applications routinely list the documents that must accompany them (ID copy,
+accredited certificates, CV, police report). It belongs on the card's detail
+side next to `qualifications`.
+
+In `enrich/schemas.py`, add to `JobAttrs`:
+
+```python
+    required_documents: list[str] = Field(default_factory=list)
+```
+
+In `enrich/prompts.py`, bump `PROMPT_VERSION` to `2` and add to the system
+prompt's numbered rules:
+
+```
+9. `required_documents` lists what an applicant must attach -- ID copy, \
+accredited certificates, CV, reference letters, police report. One short \
+string each, copied from the source. It is not the same as `qualifications`, \
+which describes the person; this describes the paperwork.
+```
+
+Add to `enrich/cards.py` in `_job_card`, on the detail side rather than the
+glance side — the card already has three things competing for space:
+
+```python
+        "required_documents": a.required_documents,
+```
+
+Test in `tests/enrich/test_schemas.py`:
+
+```python
+def test_job_attrs_carries_required_documents():
+    j = JobAttrs(required_documents=["ID card copy", "Accredited certificates"])
+    assert len(j.required_documents) == 2
+    assert JobAttrs().required_documents == []
+```
+
+The `PROMPT_VERSION` bump re-enriches iBay automatically and deliberately does
+**not** backfill gazette (spec 5.7). Gazette jobs pick up
+`required_documents` when they are next marked stale.
+
+- [ ] **Step 10: Deadline-based visibility**
+
+An expired vacancy should be out of the way by default but still reachable —
+a closed posting is legitimately useful for someone researching a role, and
+deleting it would contradict spec 12.6's rule that nothing is destroyed.
+
+Add to `search/facets.py` in `JOB_FACETS`:
+
+```python
+    _f(key="deadline", label_en="Deadline", label_dv="ސުންގަޑި",
+       widget="checkbox", storage="column", path="expires_at"),
+```
+
+That facet is special-cased rather than aggregated raw, because its values are
+computed from `now()`. In `search/filters.py`, add a branch:
+
+```python
+        elif d.key == "deadline":
+            # Values are open | closing_soon | closed, derived at query time.
+            # Never stored: a gazette row is written once and would otherwise
+            # advertise a closed vacancy as open forever (spec 8).
+            wanted = set(f.values)
+            parts = []
+            if "open" in wanted:
+                parts.append("(d.expires_at IS NULL OR d.expires_at >= now())")
+            if "closing_soon" in wanted:
+                parts.append(
+                    "(d.expires_at >= now() AND "
+                    "d.expires_at < now() + interval '7 days')"
+                )
+            if "closed" in wanted:
+                parts.append("(d.expires_at IS NOT NULL AND d.expires_at < now())")
+            clauses.append("(" + " OR ".join(parts) + ")" if parts else "TRUE")
+```
+
+and give the job tab a default in `search/query.py`'s `search_page`: when
+`doc_type == "job"` and no explicit `deadline` filter was supplied, append
+`deadline:open`. Surface it in the response as an applied default so the UI can
+show "hiding N closed vacancies" with a way to include them — a silent default
+filter is the same sin as silent relaxation.
+
+Tests in `search/tests/test_query.py`:
+
+```python
+@pytest.mark.django_db
+def test_closed_vacancies_are_hidden_from_the_jobs_tab_by_default(job_corpus):
+    page = search_page("officer", doc_type="job")
+    assert all(r.card.get("deadline_state") != "closed" for r in page.results)
+
+
+@pytest.mark.django_db
+def test_closed_vacancies_are_reachable_when_asked_for(job_corpus):
+    fs = parse_filters(["deadline:closed"], "job")
+    assert search_page("officer", doc_type="job", filters=fs).results
+
+
+@pytest.mark.django_db
+def test_a_job_with_no_deadline_is_treated_as_open(job_corpus):
+    """Absence of a deadline is not evidence the vacancy closed."""
+    page = search_page("undated", doc_type="job")
+    assert page.results
+
+
+@pytest.mark.django_db
+def test_the_default_is_reported_not_silent(job_corpus):
+    page = search_page("officer", doc_type="job")
+    assert "deadline:open" in page.applied_defaults
+```
+
+- [ ] **Step 11: Guard the take-home estimate against banded pay**
+
+Not the multi-posting split, which is deliberately out of scope — but one
+narrow guard, because a single iulaan advertising two ranks currently produces
+a **fabricated** number rather than a merely incomplete one.
+
+The end-to-end test record (`gazette:407587`, Medical Officer at Dr. Abdul
+Samad Memorial Hospital) advertises two ranks. Enrichment flattened them into
+one compensation: `basic_salary=18129`, `basic_salary_max=20004`, and four
+allowances — position 10,382 **and** 11,456, attendance 281/day **and**
+310/day. Those are two ranks' figures, not one rank's. `estimate_net` then
+sums all four onto the lower basic:
+
+```
+18129 + 10382 + 11456 + (281*20) + (310*20) = MVR 51,787
+```
+
+against a real take-home nearer MVR 34,000. Every individual number is present
+in the source, so the grounding validator passes it — this is the one class of
+error layer 3 structurally cannot catch.
+
+The signal is reliable: a pay **band** (`basic_salary_max` set) together with
+two allowances sharing a `kind` means the line items describe more than one
+rank and cannot be summed.
+
+In `enrich/compensation.py`, add before the allowance loop:
+
+```python
+def _describes_multiple_ranks(comp: Compensation) -> bool:
+    """A pay band plus duplicate allowance kinds means these line items belong
+    to two different ranks advertised in one notice. Summing them invents a
+    salary nobody offers."""
+    if not comp.basic_salary_max:
+        return False
+    kinds = [a.kind for a in comp.allowances if a.amount is not None]
+    return len(kinds) != len(set(kinds))
+```
+
+and in `estimate_net`, after the `completeness` check:
+
+```python
+    if _describes_multiple_ranks(comp):
+        # Report the stated band and refuse to compute. `salary_display`
+        # already renders 'MVR 18,129 - 20,004 / month', which is true.
+        return None
+```
+
+Test in `tests/enrich/test_compensation.py`:
+
+```python
+def test_a_banded_posting_with_duplicate_allowances_refuses_to_estimate():
+    """Real record gazette:407587 -- one iulaan, two ranks. Summing both
+    ranks' allowances onto the lower basic produced MVR 51,787 against a real
+    figure near 34,000. No estimate beats a fabricated one."""
+    comp = Compensation(
+        basic_salary=18129, basic_salary_max=20004, salary_state="listed",
+        completeness="full",
+        allowances=[
+            Allowance(kind="other", label_raw="Position Allowance",
+                      amount=10382, basis="fixed_monthly"),
+            Allowance(kind="other", label_raw="Position Allowance",
+                      amount=11456, basis="fixed_monthly"),
+            Allowance(kind="attendance", label_raw="Attendance (per day)",
+                      amount=281, basis="per_day"),
+            Allowance(kind="attendance", label_raw="Attendance (per day)",
+                      amount=310, basis="per_day"),
+        ],
+    )
+    assert estimate_net(comp) is None
+    assert salary_display(comp) == "MVR 18,129 - 20,004 / month"
+
+
+def test_a_band_with_distinct_allowance_kinds_still_estimates():
+    """A genuine grade band with one allowance each is not two ranks."""
+    comp = Compensation(
+        basic_salary=8000, basic_salary_max=9000, salary_state="listed",
+        completeness="full", pension_applies=True,
+        allowances=[Allowance(kind="living", label_raw="Living", amount=1000,
+                              basis="fixed_monthly")],
+    )
+    assert estimate_net(comp) is not None
+```
+
+- [ ] **Step 12: Re-run everything and re-enrich the sample**
+
+```bash
+pytest search/tests/ tests/enrich/ -q
+python manage.py reindex --source gazette
+python manage.py enrich_documents --source gazette --type job --limit 25 --force
+```
+
+Then check the two records by hand: `expires_at` set, `card.deadline` present,
+no `deadline_state` stored, and `gazette:407587` showing a band with no
+take-home estimate.
+
+- [ ] **Step 13: Commit**
+
+```bash
+jj commit -m "P5 task 0B: gazette dates, job deadlines, required_documents"
+```
+
+---
+
 ### Task 1: django-ninja mount and `/api/v1/meta`
 
 **Files:**
