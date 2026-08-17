@@ -7,7 +7,9 @@ class SearchConfig(AppConfig):
 
     def ready(self):
         from search.adapters import base
+        from search.adapters.gazette import GazetteAdapter
         from search.adapters.ibay import IbayAdapter
 
-        if "ibay" not in base._REGISTRY:
-            base.register(IbayAdapter())
+        for adapter in (IbayAdapter(), GazetteAdapter()):
+            if adapter.key not in base._REGISTRY:
+                base.register(adapter)
