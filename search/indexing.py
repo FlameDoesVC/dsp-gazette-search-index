@@ -12,6 +12,7 @@ from typing import Iterable
 
 from django.conf import settings
 from django.db import connection, transaction
+from django.utils.module_loading import import_string
 
 from search.adapters import base
 from search.adapters.base import DocumentDraft
@@ -19,6 +20,27 @@ from search.lang import normalize_text, strip_fili, translit_dv_to_latin
 from search.models import SearchDocument
 
 logger = logging.getLogger(__name__)
+
+_OVERLAY_CACHE: list | None = None
+
+
+def _overlays():
+    """Resolved once per process. Spec 3.3: enrichment is a layer over the
+    index, so `search` declares the seam and `enrich` fills it -- the import
+    never runs the other way."""
+    global _OVERLAY_CACHE
+    if _OVERLAY_CACHE is None:
+        _OVERLAY_CACHE = [
+            import_string(path)
+            for path in getattr(settings, "SEARCH_DRAFT_OVERLAYS", [])
+        ]
+    return _OVERLAY_CACHE
+
+
+def apply_overlays(draft: DocumentDraft) -> DocumentDraft:
+    for fn in _overlays():
+        draft = fn(draft)
+    return draft
 
 # Written by upsert; everything except the identity pair and `id`.
 _UPDATE_FIELDS = [
@@ -205,7 +227,7 @@ def reindex_source(
         draft = adapter.to_document(raw)
         if draft is None:
             continue
-        buffer.append(draft)
+        buffer.append(apply_overlays(draft))
         if len(buffer) >= batch_size:
             written += upsert_drafts(buffer)
             buffer.clear()
@@ -213,3 +235,14 @@ def reindex_source(
     if buffer:
         written += upsert_drafts(buffer)
     return written
+
+
+from django.core.signals import setting_changed  # noqa: E402
+from django.dispatch import receiver  # noqa: E402
+
+
+@receiver(setting_changed)
+def _reset_overlay_cache(sender, setting, **kwargs):
+    global _OVERLAY_CACHE
+    if setting == "SEARCH_DRAFT_OVERLAYS":
+        _OVERLAY_CACHE = None

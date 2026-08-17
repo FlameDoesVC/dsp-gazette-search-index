@@ -1,0 +1,106 @@
+import pytest
+
+from enrich.models import EnrichedRecord
+from enrich.overlay import apply_enrichment
+from search.adapters.base import DocumentDraft
+
+
+def _draft(**kw):
+    base = dict(source="gazette", source_key="IUL-1", doc_type="news",
+                url="https://gazette.gov.mv/iulaan/1", title_en="Raw title",
+                summary_en="raw", card={"source": "gazette", "title": "Raw title"},
+                content_hash="h" * 64)
+    base.update(kw)
+    return DocumentDraft(**base)
+
+
+@pytest.mark.django_db
+def test_a_draft_with_no_record_passes_through_untouched():
+    d = _draft()
+    out = apply_enrichment(d)
+    assert out is d
+
+
+@pytest.mark.django_db
+def test_a_failed_record_does_not_degrade_the_draft():
+    """Indexing never blocks on enrichment. Spec 5.2."""
+    EnrichedRecord.objects.create(source="gazette", source_key="IUL-1",
+                                  content_hash="h" * 64, doc_type="job",
+                                  status="failed")
+    out = apply_enrichment(_draft())
+    assert out.doc_type == "news"
+    assert out.title_en == "Raw title"
+
+
+@pytest.mark.django_db
+def test_a_stale_hash_record_is_ignored():
+    """The record describes text that no longer exists. Using its attrs would
+    attach last month's salary to this month's listing."""
+    EnrichedRecord.objects.create(source="gazette", source_key="IUL-1",
+                                  content_hash="OLD", doc_type="job", status="ok",
+                                  canonical_title_en="Officer")
+    out = apply_enrichment(_draft(content_hash="NEW"))
+    assert out.title_en == "Raw title"
+
+
+@pytest.mark.django_db
+def test_an_ok_record_supplies_doc_type_title_summary_attrs_and_card():
+    EnrichedRecord.objects.create(
+        source="gazette", source_key="IUL-1", content_hash="h" * 64,
+        doc_type="job", status="ok",
+        canonical_title_en="Administrative Officer",
+        canonical_title_dv="އެޑްމިނިސްޓްރޭޓިވް އޮފިސަރ",
+        summary_en="A GS3 post at the Ministry of Example.",
+        attrs={"role": "Administrative Officer", "employer": "Ministry of Example",
+               "compensation": {"basic_salary": 10750, "salary_state": "listed",
+                                "completeness": "basic_only"}},
+        keywords=["officer", "GS3"],
+    )
+    out = apply_enrichment(_draft())
+    assert out.doc_type == "job"
+    assert out.title_en == "Administrative Officer"
+    assert out.title_dv == "އެޑްމިނިސްޓްރޭޓިވް އޮފިސަރ"
+    assert out.summary_en.startswith("A GS3 post")
+    assert out.attrs["role"] == "Administrative Officer"
+    assert out.card["role"] == "Administrative Officer"
+    assert out.card["salary_display"] == "MVR 10,750 / month"
+
+
+@pytest.mark.django_db
+def test_needs_review_still_supplies_what_survived():
+    """A conflict on one field is not a reason to discard the other nine."""
+    EnrichedRecord.objects.create(
+        source="gazette", source_key="IUL-1", content_hash="h" * 64,
+        doc_type="job", status="needs_review",
+        canonical_title_en="Administrative Officer", attrs={"role": "Officer"},
+    )
+    out = apply_enrichment(_draft())
+    assert out.doc_type == "job"
+    assert out.card["role"] == "Officer"
+
+
+@pytest.mark.django_db
+def test_keywords_are_folded_into_the_search_text_not_into_the_card():
+    EnrichedRecord.objects.create(
+        source="gazette", source_key="IUL-1", content_hash="h" * 64,
+        doc_type="news", status="ok", keywords=["tender", "ބީލަން"],
+        summary_en="Bids invited.",
+    )
+    out = apply_enrichment(_draft(text_en="body text"))
+    assert "tender" in out.text_en
+    assert "ބީލަން" in out.text_dv
+    assert "keywords" not in out.card
+
+
+@pytest.mark.django_db
+def test_the_overlay_never_clears_stale_marked_at():
+    """reindex is the last stage in the chain and the only one that clears the
+    work ticket. If enrichment cleared it, `enrich_documents --stale` followed
+    by `reindex --stale` would index nothing. Spec 5.7."""
+    from search.models import SearchDocument
+    from django.utils import timezone
+    SearchDocument.objects.create(source="gazette", source_key="IUL-1",
+                                  doc_type="news", url="https://x",
+                                  stale_marked_at=timezone.now())
+    apply_enrichment(_draft())
+    assert SearchDocument.objects.get().stale_marked_at is not None

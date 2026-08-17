@@ -1,0 +1,89 @@
+"""Fold EnrichedRecord into a DocumentDraft. Spec 3.3, 5.2.
+
+Called by search.indexing between the adapter and the upsert. Three rules:
+
+- A record whose content_hash does not match the draft describes text that no
+  longer exists, and applying it would attach last month's extraction to this
+  month's listing. Ignored.
+- `failed` records are ignored; `needs_review` records are applied. A conflict
+  on one field is not a reason to discard the other nine.
+- This function must not touch stale_marked_at. reindex clears it, and it must
+  still be set when reindex runs.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from enrich.cards import build_card
+from enrich.models import EnrichedRecord
+from enrich.schemas import ATTRS_FOR_TYPE
+from search.adapters.base import DocumentDraft
+
+logger = logging.getLogger(__name__)
+
+_USABLE = ("ok", "needs_review")
+
+
+def apply_enrichment(draft: DocumentDraft) -> DocumentDraft:
+    record = (
+        EnrichedRecord.objects
+        .filter(source=draft.source, source_key=draft.source_key)
+        .only("doc_type", "status", "content_hash", "canonical_title_en",
+              "canonical_title_dv", "summary_en", "summary_dv", "attrs", "keywords")
+        .first()
+    )
+    if record is None or record.status not in _USABLE:
+        return draft
+    if draft.content_hash and record.content_hash != draft.content_hash:
+        logger.debug("enrichment hash mismatch for %s:%s", draft.source, draft.source_key)
+        return draft
+
+    draft.doc_type = record.doc_type or draft.doc_type
+
+    if record.canonical_title_en:
+        draft.title_en = record.canonical_title_en
+    if record.canonical_title_dv:
+        draft.title_dv = record.canonical_title_dv
+    if record.summary_en:
+        draft.summary_en = record.summary_en
+    if record.summary_dv:
+        draft.summary_dv = record.summary_dv
+
+    model_cls = ATTRS_FOR_TYPE.get(draft.doc_type, ATTRS_FOR_TYPE["news"])
+    try:
+        attrs_model = model_cls(**(record.attrs or {}))
+    except Exception:                      # already validated at write time
+        logger.warning("unparseable stored attrs for %s:%s",
+                       draft.source, draft.source_key)
+        return draft
+
+    draft.attrs = {**draft.attrs, **attrs_model.model_dump()}
+
+    base = dict(draft.card)
+    base.setdefault("source", draft.source)
+    base.setdefault("title", draft.title_en or draft.title_dv)
+    base.setdefault("summary", draft.summary_en or draft.summary_dv)
+    base.setdefault("external_url", draft.url)
+    base.setdefault("price", draft.price)
+    base.setdefault("currency", draft.currency)
+    base.setdefault("location", draft.location)
+    base.setdefault("published_at",
+                    draft.published_at.isoformat() if draft.published_at else None)
+    draft.card = build_card(draft.doc_type, attrs_model, base=base)
+
+    # Aliases and synonyms are search surface, not display surface, so they go
+    # into the vectors and stay out of the card.
+    if record.keywords:
+        latin = [k for k in record.keywords if not _is_thaana(k)]
+        thaana = [k for k in record.keywords if _is_thaana(k)]
+        if latin:
+            draft.text_en = f"{draft.text_en}\n{' '.join(latin)}".strip()
+        if thaana:
+            draft.text_dv = f"{draft.text_dv}\n{' '.join(thaana)}".strip()
+
+    return draft
+
+
+def _is_thaana(s: str) -> bool:
+    return any("ހ" <= c <= "޿" for c in s)

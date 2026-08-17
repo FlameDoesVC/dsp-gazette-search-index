@@ -399,7 +399,7 @@ In `beynunehcheh/urls.py`:
 from api.urls import api as api_v1
 
 urlpatterns = [
-    ...
+    # ... existing entries stay ...
     path("api/v1/", api_v1.urls),
 ]
 ```
@@ -2028,14 +2028,18 @@ Migration: `python manage.py makemigrations search`, then hand-add the trigram i
 
 ```python
 from django.contrib.postgres.indexes import GinIndex
-from django.contrib.postgres.operations import TrigramExtension
+from django.db import migrations
 
-# in operations, after CreateModel:
-    migrations.AddIndex(
-        model_name="suggestterm",
-        index=GinIndex(fields=["term"], name="suggest_term_trgm",
-                       opclasses=["gin_trgm_ops"]),
-    ),
+
+class Migration(migrations.Migration):
+    operations = [
+        # ... the generated CreateModel for SuggestTerm stays first ...
+        migrations.AddIndex(
+            model_name="suggestterm",
+            index=GinIndex(fields=["term"], name="suggest_term_trgm",
+                           opclasses=["gin_trgm_ops"]),
+        ),
+    ]
 ```
 
 `GinIndex` with `opclasses` requires `fields` and `opclasses` to be the same length; if Django rejects it, fall back to `migrations.RunSQL("CREATE INDEX suggest_term_trgm ON search_suggestterm USING gin (term gin_trgm_ops)", reverse_sql="DROP INDEX suggest_term_trgm")`.
