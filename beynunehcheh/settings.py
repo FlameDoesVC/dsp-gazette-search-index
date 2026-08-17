@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'gazette',
     'ibay',
     'search',
+    'enrich',
 ]
 
 MIDDLEWARE = [
@@ -229,3 +230,29 @@ TRANSCRIBE_MAX_CER = float(os.environ.get("TRANSCRIBE_MAX_CER", "0.15"))
 # The anthropic SDK reads ANTHROPIC_API_KEY by default; accept CLAUDE_API_KEY
 # as the project's canonical name so the env file is not confusing.
 CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "")
+
+# --- Enrichment (spec 5.1, 4.3.2) ---
+ENRICH_PROVIDER = os.getenv("ENRICH_PROVIDER", "deepseek")
+ENRICH_MODEL = os.getenv("ENRICH_MODEL", "deepseek-v4-flash")
+ENRICH_MODEL_ESCALATION = os.getenv("ENRICH_MODEL_ESCALATION", "deepseek-v4-pro")
+ENRICH_MODEL_LOCAL = os.getenv("ENRICH_MODEL_LOCAL", "qwen3.5:4b")
+ENRICH_CONCURRENCY = int(os.getenv("ENRICH_CONCURRENCY", "8"))
+ENRICH_TIMEOUT = float(os.getenv("ENRICH_TIMEOUT", "120"))
+# translate.py already caps gazette bodies at 3,500 chars; match it.
+ENRICH_MAX_INPUT_CHARS = int(os.getenv("ENRICH_MAX_INPUT_CHARS", "3500"))
+
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+
+# Maldives Retirement Pension Scheme. Settings, not constants, because tax
+# treatment changes and hardcoding it is how a search engine starts lying.
+# Spec 4.3.2.
+PENSION_RATE = float(os.getenv("PENSION_RATE", "0.07"))
+PENSION_BASE = os.getenv("PENSION_BASE", "basic")   # basic | gross
+DEFAULT_WORKING_DAYS = int(os.getenv("DEFAULT_WORKING_DAYS", "20"))
+
+# Draft overlays run between adapter.to_document() and upsert. `search` knows
+# only these dotted paths; it never imports `enrich`.
+SEARCH_DRAFT_OVERLAYS = [
+    "enrich.overlay.apply_enrichment",
+]
