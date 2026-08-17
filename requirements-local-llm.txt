@@ -1,0 +1,5 @@
+# Only needed to run the translation model on this machine.
+# Not installed in containers: inference runs on the GPU host over OLLAMA_URL.
+llama_cpp_python==0.3.23
+huggingface_hub==1.17.0
+hf-xet==1.5.0

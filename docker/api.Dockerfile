@@ -16,20 +16,8 @@ RUN apt-get update \
 
 COPY requirements.txt ./
 
-# llama-cpp-python and the huggingface downloader exist for running the
-# translation model on the same machine. Inference lives on the GPU host and is
-# reached over OLLAMA_URL, so they are filtered out here: building llama.cpp in
-# this image costs many minutes and buys nothing.
-#
-# Phase 1 replaces this filter with a proper requirements.txt /
-# requirements-local-llm.txt split, at which point this becomes a plain
-# `pip install -r requirements.txt`.
-RUN grep -viE '^(llama[-_]cpp[-_]python|huggingface[-_]hub|hf-xet)([=<>~ ]|$)' \
-        requirements.txt > /tmp/requirements.txt \
-    && pip install -r /tmp/requirements.txt \
+RUN pip install -r requirements.txt \
     && pip install \
-        "psycopg[binary]" \
-        dj-database-url \
         django-ninja \
         gunicorn \
         uvicorn \

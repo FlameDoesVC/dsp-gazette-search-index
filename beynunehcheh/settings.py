@@ -25,12 +25,21 @@ load_dotenv(BASE_DIR / ".env")
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure--xa13!_4x+q4gzeqct-hi9(9mukffbr5&acj36uj)s$oyz8kav'
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure--xa13!_4x+q4gzeqct-hi9(9mukffbr5&acj36uj)s$oyz8kav",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 
-ALLOWED_HOSTS = ['10.0.0.107', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", "10.0.0.107,localhost,127.0.0.1"
+    ).split(",")
+    if h.strip()
+]
 
 
 # Application definition
@@ -42,6 +51,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.postgres',
     'treebeard',
     'gazette',
     'ibay',
@@ -81,11 +91,25 @@ WSGI_APPLICATION = 'beynunehcheh.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+import dj_database_url
+
+_default_url = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+_direct_url = os.environ.get("DATABASE_URL_DIRECT", _default_url)
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    # Pooled in production (PgBouncer, transaction mode). Short web requests.
+    "default": dj_database_url.parse(
+        _default_url,
+        conn_max_age=int(os.environ.get("DJANGO_CONN_MAX_AGE", "0")),
+        disable_server_side_cursors=True,
+    ),
+    # Never pooled. Management commands stream over this alias and need real
+    # server-side cursors; DDL cannot run through a transaction-mode pool.
+    "direct": dj_database_url.parse(
+        _direct_url,
+        conn_max_age=0,
+        disable_server_side_cursors=False,
+    ),
 }
 
 
