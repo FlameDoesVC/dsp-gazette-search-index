@@ -55,11 +55,9 @@ def estimate_net(comp: Compensation, working_days: int | None = None) -> NetEsti
     if working_days is None:
         working_days = settings.DEFAULT_WORKING_DAYS
 
-    if comp.salary_state != "listed" or not comp.basic_salary:
+    if comp.basic_salary is None:
         return None
     if comp.period != "month":
-        return None
-    if comp.completeness == "none":
         return None
 
     basic = float(comp.basic_salary)
@@ -89,7 +87,7 @@ def estimate_net(comp: Compensation, working_days: int | None = None) -> NetEsti
         added += amount
         breakdown.append({"label": a.kind, "amount": amount})
 
-    if added == 0.0 and pension == 0.0:
+    if comp.completeness == "basic_only" and pension == 0.0 and added == 0.0:
         # Nothing to say that the stated salary does not already say.
         return None
 
