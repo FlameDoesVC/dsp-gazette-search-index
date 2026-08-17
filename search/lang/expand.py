@@ -20,7 +20,10 @@ from search.lang.translit import (
 )
 
 _PHRASE = re.compile(r'"([^"]+)"')
-_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
+# Word characters minus underscore, plus the Thaana fili range (U+07A6-U+07B0).
+# Fili are combining marks (Mn) that `\w` does not match; without them a Thaana
+# word splits into bare consonants at every vowel mark.
+_TOKEN = re.compile(r"(?:[^\W_]|[\u07A6-\u07B0])+", re.UNICODE)
 
 MAX_TERMS_PER_SIDE = 32
 
