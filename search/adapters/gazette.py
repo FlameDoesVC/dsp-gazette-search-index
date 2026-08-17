@@ -15,6 +15,7 @@ from lxml import html as lxml_html
 
 from gazette.models import Iulaan
 from search.adapters.base import DocumentDraft, RawDocument
+from search.extract.tables import parse_label_value_pairs
 from search.lang import translit_dv_to_latin
 
 # Spec 5.3 classification priors. Anything absent from this table becomes
@@ -69,7 +70,14 @@ class GazetteAdapter:
         return RawDocument(
             source=self.key,
             source_key=source_key,
-            payload={"iulaan": iulaan},
+            payload={
+                "iulaan": iulaan,
+                "attachments": list(
+                    iulaan.attachment_files.filter(status="ok")
+                    .exclude(role="application_form")
+                    .exclude(text="")
+                ),
+            },
         )
 
     def to_document(self, raw: RawDocument) -> DocumentDraft | None:
@@ -83,7 +91,20 @@ class GazetteAdapter:
         office_en = (i.office.translated_name or i.office.name) if i.office else ""
         office_dv = i.office.name if i.office else ""
 
-        text_dv = f"{i.title} {office_dv} {type_name} {body_dv}".strip()
+        attachments = raw.payload.get("attachments", [])
+        attachment_text = "\n".join(a.text for a in attachments)
+        transcribed = any(a.transcribed for a in attachments)
+
+        # Table structure the source already provides (spec 5.2). Parsed here
+        # so P4's extraction receives labelled pairs, not markup.
+        pairs = parse_label_value_pairs(i.body)
+        pair_text = "\n".join(f"{label}: {value}" for label, value in pairs)
+
+        text_dv = " ".join(
+            part for part in
+            (i.title, office_dv, type_name, body_dv, pair_text, attachment_text)
+            if part
+        ).strip()
         text_en = f"{i.translated_title} {office_en} {body_en}".strip()
 
         return DocumentDraft(
@@ -105,6 +126,8 @@ class GazetteAdapter:
                 "announcement_type": type_name,
                 "additional_info": i.additional_info or {},
                 "attachment_count": len(i.attachments or {}),
+                "table_pairs": pairs,
+                "transcribed": transcribed,
             },
             card={
                 "source": self.key,
@@ -113,18 +136,27 @@ class GazetteAdapter:
                 "announcement_type": type_name,
                 "external_url": i.url,
                 "attachment_count": len(i.attachments or {}),
+                "detail_source": "attachment" if attachment_text else "listing",
+                "transcribed": transcribed,
             },
-            quality=_quality(body_dv, i),
+            quality=_quality(body_dv, i, attachments, transcribed),
             content_hash=hashlib.sha256(
-                f"{i.title}{i.body}".encode()
+                "".join(
+                    [i.title or "", i.body or ""]
+                    + [a.content_sha or a.text[:64] for a in attachments]
+                ).encode()
             ).hexdigest(),
         )
 
 
-def _quality(body_dv: str, iulaan: Iulaan) -> float:
+def _quality(body_dv: str, iulaan: Iulaan, attachments=(), transcribed=False) -> float:
     score = 0.0
-    score += 0.4 if len(body_dv) >= 500 else 0.1
+    score += 0.3 if len(body_dv) >= 500 else 0.1
     score += 0.2 if iulaan.translated_title else 0.0
-    score += 0.2 if iulaan.office_id else 0.0
-    score += 0.2 if iulaan.attachments else 0.0
-    return round(score, 3)
+    score += 0.15 if iulaan.office_id else 0.0
+    score += 0.2 if attachments else 0.0
+    score += 0.15 if iulaan.attachments else 0.0
+    # Transcribed text is lower-trust than a clean text layer (spec 5.6.1).
+    if transcribed:
+        score *= 0.8
+    return round(min(score, 1.0), 3)

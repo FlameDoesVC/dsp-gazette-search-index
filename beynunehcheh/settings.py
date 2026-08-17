@@ -226,3 +226,6 @@ TRANSCRIBE_PAGES_PER_CHUNK = int(os.environ.get("TRANSCRIBE_PAGES_PER_CHUNK", "2
 # Calibrated by the cer_harness command; text that is confidently wrong is
 # worse than absent text.
 TRANSCRIBE_MAX_CER = float(os.environ.get("TRANSCRIBE_MAX_CER", "0.15"))
+# The anthropic SDK reads ANTHROPIC_API_KEY by default; accept CLAUDE_API_KEY
+# as the project's canonical name so the env file is not confusing.
+CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY", "")

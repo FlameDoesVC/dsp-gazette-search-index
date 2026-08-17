@@ -115,7 +115,10 @@ def transcribe_batch(items: list[TranscriptionItem]) -> dict[str, ExtractionResu
     )
     from anthropic.types.messages.batch_create_params import Request
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(
+        api_key=getattr(settings, "CLAUDE_API_KEY", None)
+        or None,
+    )
     batch = client.messages.batches.create(
         requests=[
             Request(
