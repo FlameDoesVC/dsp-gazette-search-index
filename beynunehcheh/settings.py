@@ -212,3 +212,17 @@ SEARCH_RANKING = {
     },
     "expired_penalty": 0.5,
 }
+
+# --- attachment extraction ------------------------------------------------
+ATTACHMENT_FETCH_DELAY = float(os.environ.get("ATTACHMENT_FETCH_DELAY", "0.5"))
+# Below this many extracted characters per page a PDF is treated as scanned.
+SCANNED_CHARS_PER_PAGE = int(os.environ.get("SCANNED_CHARS_PER_PAGE", "200"))
+TRANSCRIBE_MODEL = os.environ.get("TRANSCRIBE_MODEL", "claude-haiku-4-5")
+TRANSCRIBE_MAX_PAGES = int(os.environ.get("TRANSCRIBE_MAX_PAGES", "10"))
+# A 60-page document would emit ~90k output tokens against Haiku 4.5's 64k
+# ceiling, so long documents are split. Correctness, not cost.
+TRANSCRIBE_PAGES_PER_CHUNK = int(os.environ.get("TRANSCRIBE_PAGES_PER_CHUNK", "20"))
+# Character error rate above which transcription output is rejected outright.
+# Calibrated by the cer_harness command; text that is confidently wrong is
+# worse than absent text.
+TRANSCRIBE_MAX_CER = float(os.environ.get("TRANSCRIBE_MAX_CER", "0.15"))
