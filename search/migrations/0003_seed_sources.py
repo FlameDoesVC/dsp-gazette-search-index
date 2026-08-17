@@ -34,5 +34,5 @@ def unseed(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("search", "0001_initial")]
+    dependencies = [("search", "0002_searchdocument")]
     operations = [migrations.RunPython(seed, unseed)]
