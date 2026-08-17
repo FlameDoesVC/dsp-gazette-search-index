@@ -185,3 +185,30 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:12b")
+
+# --- search ---------------------------------------------------------------
+# `dual` indexes fili-preserved lexemes at weight A and the consonant skeleton
+# at weight C, so a correctly-filied query outranks a skeleton collision while
+# a mis-filied one still matches. `skeleton` and `fili` exist so the strategy
+# can be changed with a reindex rather than a migration. Spec 6.2.
+SEARCH_DV_INDEX_MODE = os.environ.get("SEARCH_DV_INDEX_MODE", "dual")
+
+SEARCH_RANKING = {
+    "w_en": 1.0,
+    "w_dv": 1.0,
+    "w_latin": 0.6,
+    "w_trigram": 0.4,
+    "w_same_lang": 0.5,
+    "w_freshness": 0.3,
+    "w_quality": 0.2,
+    "w_phrase": 0.5,
+    "trigram_threshold": 0.25,
+    "candidate_limit": 500,
+    "freshness_half_life_days": {
+        "news": 7,
+        "job": 14,
+        "shopping": 30,
+        "property": 45,
+    },
+    "expired_penalty": 0.5,
+}

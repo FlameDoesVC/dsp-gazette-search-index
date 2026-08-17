@@ -81,3 +81,23 @@ class SearchDocument(models.Model):
 
     def __str__(self):
         return f"{self.source}:{self.source_key}"
+
+
+class QueryAlias(models.Model):
+    """Curated synonym expansion. Spec 6.5.
+
+    Seeded by hand and grown from the zero-result query list that P5's logging
+    produces -- that list is the highest-signal input for this table.
+    """
+
+    term = models.CharField(max_length=128, unique=True)
+    expands_to = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    note = models.CharField(max_length=256, blank=True)
+
+    class Meta:
+        verbose_name_plural = "query aliases"
+        ordering = ["term"]
+
+    def __str__(self):
+        return self.term
