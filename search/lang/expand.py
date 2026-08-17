@@ -73,23 +73,31 @@ def build_query_plan(q: str, *, use_aliases: bool = True) -> QueryPlan:
 
     plan.response_lang = "en" if lang == ENGLISH else "dv"
 
+    # Keyboard space is case-sensitive (lowercase `a` is abafili, uppercase `A`
+    # is aabaafili), so the decode must run on the original-case token, never
+    # the casefolded one. `labelled` is casefolded; tokenize the raw query to
+    # recover case. The token count matches because normalization only
+    # casefolds and collapses whitespace.
+    raw_tokens = _TOKEN.findall(without_phrases)
+
     en: list[str] = []
     dv: list[str] = []
     latin: list[str] = []
 
-    for token, label in labelled:
+    for (token, label), raw_token in zip(labelled, raw_tokens):
         if label == THAANA:
             dv.append(token)
             dv.append(strip_fili(token))
             latin.append(translit_dv_to_latin(token))
         elif label == KEYS:
-            decoded = decode_keys(token)
+            decoded = decode_keys(raw_token)
             if decoded:
                 dv.append(decoded)
                 dv.append(strip_fili(decoded))
                 latin.append(translit_dv_to_latin(decoded))
         elif label == LATIN_DV:
             latin.append(token)
+            en.append(token)   # phonetic words can live in English text too
             dv.extend(translit_latin_to_dv_variants(token))
         else:
             en.append(token)

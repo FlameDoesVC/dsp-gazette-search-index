@@ -1,0 +1,75 @@
+# Relevance evaluation set. Spec 14.
+# Every `expect` is a source_key in `documents` below.
+documents:
+  - {source: gazette, source_key: g-job-1, doc_type: job,
+     url: "https://gazette.gov.mv/iulaan/1",
+     title_dv: "ވަޒީފާ ފުރުޞަތު", title_en: "Job Opportunity",
+     text_dv: "ވަޒީފާ ފުރުޞަތު މިނިސްޓްރީ އޮފް އެޑިއުކޭޝަން",
+     text_en: "job opportunity ministry of education"}
+  - {source: gazette, source_key: g-rent-1, doc_type: property,
+     url: "https://gazette.gov.mv/iulaan/2",
+     title_dv: "ކުއްޔަށް ދިނުން", title_en: "For Rent",
+     text_dv: "ކުއްޔަށް ދިނުން ގެ ހުޅުމާލެ",
+     text_en: "for rent house hulhumale"}
+  - {source: gazette, source_key: g-news-1, doc_type: news,
+     url: "https://gazette.gov.mv/iulaan/3",
+     title_dv: "ޢާންމު މަޢުލޫމާތު", title_en: "Public Information",
+     text_dv: "ޢާންމު މަޢުލޫމާތު ފެން ކެނޑުން",
+     text_en: "public information water supply interruption"}
+  - {source: gazette, source_key: g-energy-1, doc_type: news,
+     url: "https://gazette.gov.mv/iulaan/4",
+     title_dv: "ހަކަތަ", title_en: "Energy",
+     text_dv: "ހަކަތަ ސަރުކާރު", text_en: "energy government"}
+  - {source: gazette, source_key: g-collide-1, doc_type: news,
+     url: "https://gazette.gov.mv/iulaan/5",
+     title_dv: "ހިކަތި", text_dv: "ހިކަތި"}
+  - {source: ibay, source_key: i-phone-1, doc_type: shopping,
+     url: "https://ibay.com.mv/1", title_en: "Apple iPhone 13 Pro 256GB",
+     text_en: "apple iphone 13 pro 256gb unlocked"}
+  - {source: ibay, source_key: i-wash-1, doc_type: shopping,
+     url: "https://ibay.com.mv/2", title_en: "Front load washing machine",
+     text_en: "front load washing machine halaalukuvefa hunna"}
+  - {source: ibay, source_key: i-bed-1, doc_type: property,
+     url: "https://ibay.com.mv/3",
+     title_en: "Sharing Bed Space Available",
+     text_en: "sharing bed space firihen kudhin bahattaden hulhumale phase 2"}
+  - {source: ibay, source_key: i-psu-1, doc_type: shopping,
+     url: "https://ibay.com.mv/4",
+     title_en: "KICO METAL POWER SUPPLY 24V-5A-120W",
+     text_en: "kico metal power supply 24v 5a 120w"}
+  - {source: ibay, source_key: i-clean-1, doc_type: job,
+     url: "https://ibay.com.mv/5",
+     title_en: "Cleaning work daily worker",
+     text_en: "cleaning jobs household office hotels daily wage"}
+
+cases:
+  # Thaana
+  - {q: "ވަޒީފާ",              expect: g-job-1,    lang: dv-Thaa}
+  - {q: "ވަޒީފާގެ ފުރުޞަތު",    expect: g-job-1,    lang: dv-Thaa}
+  - {q: "ކުއްޔަށް",             expect: g-rent-1,   lang: dv-Thaa}
+  - {q: "ޢާންމު",              expect: g-news-1,   lang: dv-Thaa}
+  - {q: "ހަކަތަ",              expect: g-energy-1, lang: dv-Thaa}
+  - {q: "ފެން",                expect: g-news-1,   lang: dv-Thaa}
+  # Keyboard space
+  - {q: "vazIfA",              expect: g-job-1,    lang: dv-Keys}
+  - {q: "kuwqyaSq",            expect: g-rent-1,   lang: dv-Keys}
+  - {q: "hakata",              expect: g-energy-1, lang: dv-Keys}
+  # Phonetic Latin Dhivehi
+  - {q: "kuyyah dhinun",       expect: g-rent-1,   lang: dv-Latn}
+  - {q: "bahattaden",          expect: i-bed-1,    lang: dv-Latn}
+  - {q: "firihen kudhin",      expect: i-bed-1,    lang: dv-Latn}
+  - {q: "halaalukuvefa hunna", expect: i-wash-1,   lang: dv-Latn}
+  # English
+  - {q: "iphone 13",           expect: i-phone-1,  lang: en}
+  - {q: "washing machine",     expect: i-wash-1,   lang: en}
+  - {q: "power supply",        expect: i-psu-1,    lang: en}
+  - {q: "cleaning job",        expect: i-clean-1,  lang: en}
+  - {q: "water supply",        expect: g-news-1,   lang: en}
+  - {q: "for rent hulhumale",  expect: g-rent-1,   lang: en}
+  - {q: "bed space",           expect: i-bed-1,    lang: en}
+
+minimal_pairs:
+  # Both share the skeleton ހކތ. The correctly-filied query must rank its own
+  # document first, while the collision is still findable (spec 6.2).
+  - {q: "ހަކަތަ", expect_first: g-energy-1}
+  - {q: "ހިކަތި", expect_first: g-collide-1}
