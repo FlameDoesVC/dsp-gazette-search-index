@@ -38,8 +38,9 @@ _MONEY_PATTERNS = [
     (re.compile(rf"({_NUM})\s*/-"), "MVR"),
 ]
 # Anything else that looks like an amount. Kept separate because it is the
-# weakest signal and the model is told so.
-_BARE_AMOUNT = re.compile(rf"(?<![\d,.])({_NUM})(?![\d,.])")
+# weakest signal and the model is told so. A trailing period that ends a
+# sentence is allowed -- '4,400.' is an amount, '4,400.50' is a decimal.
+_BARE_AMOUNT = re.compile(rf"(?<![\d,.])({_NUM})(?![,\d]|\.\d)")
 
 # P7 replaces this constant with the SpecKey unit vocabulary (spec 4.4). Until
 # then it is a fixed list, ordered longest-first so 'mAh' wins over 'A'.

@@ -2,6 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> ## ⚠ This plan shipped with three defects. Corrections live in P5 Task 0.
+>
+> Found after P3 landed. All three were errors in **this document** and were
+> implemented faithfully; the fixes and their tests are in
+> `2026-08-18-search-p5-api.md`, Task 0. Do not re-derive them from the text
+> below, and do not run `extract_attachments` until Task 0 has landed.
+>
+> | Defect | Where in this plan | Effect |
+> |---|---|---|
+> | `--no-transcribe` writes `ocr_failed`, which is terminal | Task 6, and `test_no_transcribe_flag_marks_ocr_failed_instead_of_spending` asserts it | The free measurement pass permanently disables the paid run it exists to budget for. Already fired: 89 attachments were stranded. |
+> | Batch flush sits below the `continue` that queues an item | Task 6 command body | A run of consecutive scanned PDFs accumulates whole PDFs in memory, unbounded by `--batch-size`. |
+> | `_store` labels any non-transcription failure `fetch_failed` | Task 6 `_store` | A `.docx` that fails to parse is recorded as a fetch failure and re-downloaded every run. |
+>
+> Everything else in this plan is sound and its tests pass. The money guard in
+> particular works: an attachment with `status='ok'` is never re-fetched.
+
 **Goal:** Extract the text from gazette attachments, because for most job postings the listing is a stub and the salary, qualifications and application instructions live inside an attached file.
 
 **Architecture:** An `Attachment` row per file, populated by a cheapest-first extraction ladder — `.docx` via python-docx, PDFs with a text layer via `pdftotext`, scanned PDFs via Claude Haiku 4.5 with native PDF input over the Batch API. Files are fetched, extracted and discarded; only text and a checksum are kept. A character-error-rate harness gates the transcription path.

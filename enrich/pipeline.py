@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass
 from typing import Iterator
 
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import sync_to_async
 from django.conf import settings
 
 from enrich.client import EnrichClient, ProviderError
@@ -257,7 +257,7 @@ async def run_pass(
             if inp is None:
                 counts["skipped"] += 1
                 return
-            rec = async_to_sync(enrich_one)(inp, client)
+            rec = await enrich_one(inp, client)
             counts[rec.status] = counts.get(rec.status, 0) + 1
 
     try:

@@ -12,6 +12,8 @@
 
 **Depends on:** P1 (`search.query.search`, `search.models`), P2 (`search.lang.build_query_plan`), P4 (`enrich.schemas`, `attrs` shapes, `card` payloads).
 
+**Task 0 comes first and is not API work.** It carries three corrections to P3 that were found after it landed. Two of them must be in place before any money is spent on transcription, and one has already stranded 89 attachments in this database. Land Task 0, run `reset_no_transcribe`, then start Task 1.
+
 ---
 
 ## Global Constraints
@@ -68,6 +70,502 @@ tests/api/...
 ```
 
 Why `api/` is its own app rather than routers inside `search/`: the API is a presentation layer over three domains (`search`, `enrich`, `gazette`) and putting it in `search` would make `search` import `enrich`, which P4 task 9 went to some trouble to avoid.
+
+---
+
+### Task 0: Fix three P3 defects before anything else
+
+**Do this task first. It is not part of the API work.**
+
+Three defects were found in P3 after it landed. All three originated in the P3
+plan and were implemented faithfully, so nothing here is a criticism of the
+implementation — the plan was wrong. They are collected at the front of P5
+because two of them must be fixed **before any money is spent on
+transcription**, and one has already silently changed production data.
+
+**Files:**
+- Modify: `search/management/commands/extract_attachments.py`
+- Create: `search/management/commands/reset_no_transcribe.py`
+- Test: `search/tests/test_extract_command.py` (add cases), `search/tests/test_reset_no_transcribe.py`
+
+**Interfaces:**
+- Consumes: `gazette.models.Attachment`.
+- Produces: `reset_no_transcribe` command; `--no-transcribe` gains a report line.
+
+---
+
+#### Defect A — `--no-transcribe` permanently disables transcription
+
+`--no-transcribe` writes `status="ocr_failed"`, and `ocr_failed` is terminal by
+spec 5.7 (`_TERMINAL = {"ok", "ocr_failed"}`). So the documented free
+measurement pass marks every scanned PDF as never-to-be-transcribed, and the
+paid run that follows is a silent no-op that prints `extracted 0`.
+
+This has already happened in this database. Measured on 2026-08-18:
+
+```
+ocr_failed: 89   all with method='none', transcribed=False, error=''
+ok:        160   (132 pdftotext, 28 docx)
+pending:    85
+fetch_failed: 2
+```
+
+`method='none'` with `transcribed=False` and an empty `error` is the exact
+signature of this code path, and it cannot be produced by a genuine OCR
+failure — those record `method='transcribed'`. That gives a safe recovery
+predicate.
+
+The free measurement itself did succeed and is worth keeping: **89 scanned of
+221 PDFs, 40.3%**, against the 45% estimate from the 44-file sample in spec
+5.6.2. Record it in the P3 measurements file rather than re-deriving it.
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `search/tests/test_extract_command.py`:
+
+```python
+@pytest.mark.django_db
+def test_no_transcribe_leaves_the_attachment_reprocessable(
+    job_with_pdf, monkeypatch
+):
+    """The measurement pass must not consume the work it is measuring.
+
+    ocr_failed is terminal (spec 5.7), so writing it here meant the paid run
+    that follows silently skipped every scanned PDF. The routing decision is
+    recorded; the status is not spent.
+    """
+    from search.extract import local
+    monkeypatch.setattr(
+        local, "extract_pdf_text_layer",
+        lambda c: ExtractionResult(
+            text="x", page_count=3, chars_per_page=10,
+            method="pdftotext", status="ok",
+        ),
+    )
+    call_command("extract_attachments", "--no-transcribe", stdout=StringIO())
+
+    a = Attachment.objects.get()
+    assert a.status == "pending"          # NOT ocr_failed
+    assert a.chars_per_page == 10         # the measurement is still recorded
+    assert a.page_count == 3
+
+
+@pytest.mark.django_db
+def test_measure_then_transcribe_actually_transcribes(job_with_pdf, monkeypatch):
+    """The two-step workflow from the P3 runbook, end to end. This is the
+    test whose absence let defect A ship."""
+    from search.extract import local, transcribe
+    monkeypatch.setattr(
+        local, "extract_pdf_text_layer",
+        lambda c: ExtractionResult(
+            text="x", page_count=3, chars_per_page=10,
+            method="pdftotext", status="ok",
+        ),
+    )
+    call_command("extract_attachments", "--no-transcribe", stdout=StringIO())
+
+    def _fake_batch(items):
+        assert items, "the paid run found nothing to do"
+        return {
+            i.custom_id: ExtractionResult(
+                text="transcribed body", method="transcribed",
+                status="ok", transcribed=True,
+            )
+            for i in items
+        }
+
+    monkeypatch.setattr(transcribe, "transcribe_batch", _fake_batch)
+    call_command("extract_attachments", stdout=StringIO())
+
+    a = Attachment.objects.get()
+    assert a.status == "ok"
+    assert a.transcribed is True
+
+
+@pytest.mark.django_db
+def test_no_transcribe_reports_the_scanned_fraction(job_with_pdf, monkeypatch):
+    from search.extract import local
+    monkeypatch.setattr(
+        local, "extract_pdf_text_layer",
+        lambda c: ExtractionResult(
+            text="x", page_count=3, chars_per_page=10,
+            method="pdftotext", status="ok",
+        ),
+    )
+    out = StringIO()
+    call_command("extract_attachments", "--no-transcribe", stdout=out)
+    assert "scanned" in out.getvalue().lower()
+```
+
+- [ ] **Step 2: Run to verify they fail**
+
+Run: `pytest search/tests/test_extract_command.py -k "no_transcribe or measure_then" -v`
+Expected: FAIL — the first asserts `pending` and gets `ocr_failed`; the second
+raises `AssertionError: the paid run found nothing to do`.
+
+- [ ] **Step 3: Fix the command**
+
+In `search/management/commands/extract_attachments.py`, replace the
+`--no-transcribe` branch:
+
+```python
+                if options["no_transcribe"]:
+                    attachment.status = "ocr_failed"
+                    attachment.page_count = result.page_count
+                    attachment.chars_per_page = result.chars_per_page
+                    attachment.save()
+                    continue
+```
+
+with:
+
+```python
+                if options["no_transcribe"]:
+                    # Record the routing decision, spend nothing, and leave the
+                    # attachment reprocessable. `ocr_failed` here would be
+                    # terminal (spec 5.7) and would silently disable the paid
+                    # run this measurement exists to budget for.
+                    attachment.status = "pending"
+                    attachment.page_count = result.page_count
+                    attachment.chars_per_page = result.chars_per_page
+                    attachment.save()
+                    scanned += 1
+                    continue
+```
+
+Initialise `scanned = 0` and `local_ok = 0` alongside `done = 0`, increment
+`local_ok` where `done` is incremented on the non-transcribe path, and replace
+the final summary line with:
+
+```python
+        if options["no_transcribe"]:
+            total = scanned + local_ok
+            pct = (100.0 * scanned / total) if total else 0.0
+            self.stdout.write(self.style.SUCCESS(
+                f"measured {total} PDFs: {scanned} scanned ({pct:.1f}%), "
+                f"{local_ok} had a text layer. Nothing was spent."
+            ))
+        else:
+            self.stdout.write(self.style.SUCCESS(f"extracted {done} attachments"))
+```
+
+Also update the flag's help text, which currently documents the bug:
+
+```python
+        parser.add_argument(
+            "--no-transcribe",
+            action="store_true",
+            help="Measure the scanned fraction without spending. Leaves "
+                 "scanned PDFs pending so a later paid run still picks them up.",
+        )
+```
+
+- [ ] **Step 4: Run to verify they pass**
+
+Run: `pytest search/tests/test_extract_command.py -v`
+Expected: PASS. The old
+`test_no_transcribe_flag_marks_ocr_failed_instead_of_spending` asserted the
+buggy behaviour and is replaced by
+`test_no_transcribe_leaves_the_attachment_reprocessable` — delete it.
+
+Two other tests call `--no-transcribe` as setup
+(`test_already_ok_attachments_are_never_reprocessed`,
+`test_type_filter_restricts_the_run`) and still pass: the first overwrites
+status to `ok` explicitly, and the second asserts `pending`, which is now what
+the flag leaves behind.
+
+- [ ] **Step 5: Write the recovery command**
+
+`search/management/commands/reset_no_transcribe.py`:
+
+```python
+"""Undo the rows defect A marked terminal. One-shot, safe to re-run.
+
+Only rows with the exact signature of the old --no-transcribe path are
+touched: status='ocr_failed' AND method='none' AND transcribed=False AND
+error=''. A genuine OCR failure records method='transcribed', so this cannot
+resurrect a document that actually failed the vision model, and it cannot
+touch a document a human marked off.
+"""
+
+from django.core.management.base import BaseCommand
+
+from gazette.models import Attachment
+
+
+class Command(BaseCommand):
+    help = "Reset attachments wrongly marked ocr_failed by --no-transcribe."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--dry-run", action="store_true")
+
+    def handle(self, *args, **options):
+        qs = Attachment.objects.filter(
+            status="ocr_failed", method="none", transcribed=False, error=""
+        )
+        n = qs.count()
+        self.stdout.write(
+            f"{n} attachments carry the --no-transcribe signature "
+            f"(ocr_failed / method=none / never transcribed / no error)"
+        )
+        if options["dry_run"]:
+            return
+        # page_count and chars_per_page are deliberately preserved: they are
+        # the measurement, and they save a re-fetch on the next run.
+        updated = qs.update(status="pending")
+        self.stdout.write(self.style.SUCCESS(f"{updated} reset to pending"))
+```
+
+- [ ] **Step 6: Write its test**
+
+`search/tests/test_reset_no_transcribe.py`:
+
+```python
+from io import StringIO
+
+import pytest
+from django.core.management import call_command
+
+from gazette.models import Attachment, Iulaan
+
+
+@pytest.fixture
+def iulaan(db):
+    return Iulaan.objects.create(id="IUL-1", title="t", additional_info={},
+                                 attachments=[], body="b")
+
+
+def _att(iulaan, **kw):
+    base = dict(iulaan=iulaan, url=f"https://x/{kw.get('url_n', 0)}.pdf",
+                role="main")
+    base.pop("url_n", None)
+    kw.pop("url_n", None)
+    base.update(kw)
+    return Attachment.objects.create(**base)
+
+
+@pytest.mark.django_db
+def test_the_no_transcribe_signature_is_reset(iulaan):
+    _att(iulaan, url="https://x/1.pdf", status="ocr_failed", method="none",
+         transcribed=False, error="", page_count=3, chars_per_page=10)
+    call_command("reset_no_transcribe", stdout=StringIO())
+    a = Attachment.objects.get()
+    assert a.status == "pending"
+    assert a.chars_per_page == 10       # the measurement survives
+
+
+@pytest.mark.django_db
+def test_a_genuine_ocr_failure_is_left_alone(iulaan):
+    """It went to the vision model and came back unusable. That is terminal,
+    and resurrecting it would re-bill the same document."""
+    _att(iulaan, url="https://x/2.pdf", status="ocr_failed",
+         method="transcribed", transcribed=True, error="CER 0.42")
+    call_command("reset_no_transcribe", stdout=StringIO())
+    assert Attachment.objects.get().status == "ocr_failed"
+
+
+@pytest.mark.django_db
+def test_an_ok_attachment_is_never_touched(iulaan):
+    _att(iulaan, url="https://x/3.pdf", status="ok", method="pdftotext",
+         text="body")
+    call_command("reset_no_transcribe", stdout=StringIO())
+    assert Attachment.objects.get().status == "ok"
+
+
+@pytest.mark.django_db
+def test_dry_run_changes_nothing(iulaan):
+    _att(iulaan, url="https://x/4.pdf", status="ocr_failed", method="none",
+         transcribed=False, error="")
+    call_command("reset_no_transcribe", "--dry-run", stdout=StringIO())
+    assert Attachment.objects.get().status == "ocr_failed"
+
+
+@pytest.mark.django_db
+def test_rerunning_is_a_no_op(iulaan):
+    _att(iulaan, url="https://x/5.pdf", status="ocr_failed", method="none",
+         transcribed=False, error="")
+    call_command("reset_no_transcribe", stdout=StringIO())
+    call_command("reset_no_transcribe", stdout=StringIO())
+    assert Attachment.objects.get().status == "pending"
+```
+
+- [ ] **Step 7: Run the recovery on the real database**
+
+```bash
+python manage.py reset_no_transcribe --dry-run   # expect ~89
+python manage.py reset_no_transcribe
+```
+
+---
+
+#### Defect B — the transcription batch never flushes mid-loop
+
+The `continue` that queues an item sits above the batch-size check, so the
+check only runs after a *locally* extracted attachment. Peak memory is
+`mean_pdf_size x (batch_size + longest run of consecutive scanned PDFs)` and
+each queued item holds the whole PDF in memory. At 40% scanned and randomly
+interleaved this mostly self-corrects; it bites when scans cluster, which
+`--type job` makes likely because a single office's iulaan tend to be
+uniformly scanned or uniformly digital. Spec 12 is explicit that this has to
+run on a small box.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+@pytest.mark.django_db
+def test_the_transcription_queue_respects_batch_size(db, monkeypatch):
+    """A run of consecutive scanned PDFs must not accumulate unbounded --
+    every queued item holds the whole file in memory (spec 12.4)."""
+    from search.extract import local, transcribe
+    from gazette.models import Attachment, Iulaan
+
+    iulaan = Iulaan.objects.create(id="IUL-1", title="t", additional_info={},
+                                   attachments=[], body="b")
+    for i in range(7):
+        Attachment.objects.create(iulaan=iulaan, url=f"https://x/{i}.pdf",
+                                  role="main", status="pending")
+
+    monkeypatch.setattr(
+        local, "extract_pdf_text_layer",
+        lambda c: ExtractionResult(text="x", page_count=3, chars_per_page=10,
+                                   method="pdftotext", status="ok"),
+    )
+    monkeypatch.setattr(
+        "search.extract.fetch.fetch_bytes", lambda url: (b"pdf", "sha")
+    )
+
+    seen = []
+
+    def _fake_batch(items):
+        seen.append(len(items))
+        return {
+            i.custom_id: ExtractionResult(text="t", method="transcribed",
+                                          status="ok", transcribed=True)
+            for i in items
+        }
+
+    monkeypatch.setattr(transcribe, "transcribe_batch", _fake_batch)
+    call_command("extract_attachments", "--batch-size", "3", stdout=StringIO())
+
+    assert seen, "nothing was transcribed"
+    assert max(seen) <= 3, f"batch grew to {max(seen)}, cap was 3"
+```
+
+Run it: FAIL with `batch grew to 7, cap was 3`.
+
+- [ ] **Step 2: Fix**
+
+Move the flush into the queueing branch, before the `continue`:
+
+```python
+                to_transcribe.append(
+                    transcribe.TranscriptionItem(
+                        custom_id=str(attachment.id), content=content
+                    )
+                )
+                by_id[str(attachment.id)] = attachment
+                attachment.page_count = result.page_count
+                attachment.chars_per_page = result.chars_per_page
+                # Flush here, not after the local-extraction path: a run of
+                # consecutive scanned PDFs never reaches a check placed below
+                # this `continue`, and each queued item holds a whole PDF.
+                if len(to_transcribe) >= options["batch_size"]:
+                    done += self._flush(to_transcribe, by_id)
+                    to_transcribe, by_id = [], {}
+                continue
+```
+
+and delete the now-redundant check below `self._store(...)`.
+
+- [ ] **Step 3: Run**
+
+Run: `pytest search/tests/test_extract_command.py -v` — expected PASS.
+
+---
+
+#### Defect C — local extraction failures are labelled `fetch_failed`
+
+`_store` falls back to `fetch_failed` for anything that is not a transcription,
+so a `.docx` that fails to parse records a fetch failure although the fetch
+succeeded. It is non-terminal, so the file is re-downloaded on every run —
+free, but it makes the error counters lie about what is actually broken.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+@pytest.mark.django_db
+def test_a_local_extraction_failure_is_not_recorded_as_a_fetch_failure(
+    job_with_docx, monkeypatch
+):
+    from search.extract import local
+    monkeypatch.setattr(
+        local, "extract_docx",
+        lambda c: ExtractionResult(method="docx", status="failed",
+                                   error="not a zip file"),
+    )
+    call_command("extract_attachments", stdout=StringIO())
+    a = Attachment.objects.get()
+    assert a.status == "extract_failed"
+    assert "not a zip" in a.error
+```
+
+- [ ] **Step 2: Fix**
+
+Add `("extract_failed", "extract_failed")` to `Attachment.STATUS` (a migration;
+it is a `choices` change only, so `makemigrations` produces an `AlterField`),
+and replace the status expression in `_store`:
+
+```python
+        if result.status == "ok" and attachment.text:
+            attachment.status = "ok"
+        elif result.method == "transcribed":
+            # The vision model ran and produced nothing usable. Terminal:
+            # retrying re-bills the same document.
+            attachment.status = "ocr_failed"
+        else:
+            # The bytes arrived; the parser could not use them. Not terminal,
+            # but not a fetch failure either.
+            attachment.status = "extract_failed"
+```
+
+Leave `extract_failed` out of `_TERMINAL` — a poppler upgrade or a
+python-docx fix genuinely should let these through on a later run.
+
+- [ ] **Step 3: Run the whole P3 suite**
+
+Run: `pytest search/tests/ -v`
+Expected: PASS, 70+ tests.
+
+---
+
+- [ ] **Step 4: Record the measurement that was already taken**
+
+Append to `docs/superpowers/measurements/2026-08-p3-attachments.md` (create it
+if P3 did not):
+
+```markdown
+## Scanned fraction, measured 2026-08-18
+
+Taken with `extract_attachments --no-transcribe` before the defect A fix, so
+the counts are read out of the resulting statuses rather than the summary line.
+
+| | Count | Share of PDFs |
+|---|---|---|
+| scanned (no text layer) | 89 | 40.3% |
+| text layer via pdftotext | 132 | 59.7% |
+| docx | 28 | - |
+| fetch_failed | 2 | - |
+| not yet processed | 85 | - |
+
+Spec 5.6.2 estimated 45% from a 44-file sample. Measured 40.3% over 221 PDFs,
+so the sample was close and the transcription budget in that section holds.
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+jj commit -m "P5 task 0: fix three P3 defects (no-transcribe trap, batch flush, status label)"
+```
 
 ---
 
