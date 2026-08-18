@@ -198,3 +198,29 @@ manual approval, no GGUF, and would need to beat a 60M model already at 0.98
 fili while being slower and requiring the GPU. Deprioritized.
 
 **`aya-expanse`** — its 23 supported languages do not include Dhivehi.
+
+## Live-sample validation of the chosen pipeline, 2026-08-18 (P5 task 0D step 10)
+
+First real-scanned run of Vision -> T5 -> skeleton gate, 13 job attachments,
+priced calls cached (`OCR_CACHE_DIR`). One page of attachment 2 was previously
+sent through the old Claude path, so the cache starts nearly empty.
+
+| | Count |
+|---|---|
+| transcribed ok | 10 |
+| ocr_failed at anchor gate | 3 |
+| mean anchor overlap on accepted | 0.62 (range 0.36-0.86) |
+| rejected anchors | 0.00, 0.17, 0.24 |
+
+The three rejections are the plan's predicted residual gap, not a calibration
+error: attachment 31 is a genuinely poor scan (fragmentary OCR, no title/office
+vocabulary captured) and attachment 14's OCR misread consonants the repairer
+provably cannot fix (`މޮނިޓަރިންގ` -> `ވޮނޓަރިންގ`, m->v). The accepted pages are
+readable Dhivehi (Addu Meedhoo council notices, 6-7 pages each). `OCR_ANCHOR_MIN
+= 0.30` is correctly calibrated: nothing above 0.30 was rejected and nothing
+below it looked usable.
+
+`rasterize` -> `vision_ocr` -> `repair_text` -> `skeleton_gate` -> `anchor`
+round-trip on the real corpus works end to end; the T5 model (`alakxender/
+t5-dhivehi-typo-corrector-asr`) loads on CPU and the content-addressed cache
+hit on the second pass, so a re-run re-bills nothing.
