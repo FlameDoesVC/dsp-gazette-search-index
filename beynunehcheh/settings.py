@@ -270,6 +270,10 @@ SEARCH_LOG_SALT = os.getenv("SEARCH_LOG_SALT", SECRET_KEY)
 # rollback is a race, not a test. conftest.py flips this on.
 SEARCH_LOGGING_SYNC = False
 
+# --- reports (spec 5.7) ---
+REPORT_RATE_LIMIT = int(os.getenv("REPORT_RATE_LIMIT", "20"))
+REPORT_RATE_WINDOW = int(os.getenv("REPORT_RATE_WINDOW", "3600"))
+
 # Draft overlays run between adapter.to_document() and upsert. `search` knows
 # only these dotted paths; it never imports `enrich`.
 SEARCH_DRAFT_OVERLAYS = [

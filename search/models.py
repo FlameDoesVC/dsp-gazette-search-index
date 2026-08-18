@@ -174,3 +174,37 @@ class ClickLog(models.Model):
     class Meta:
         db_table = "search_clicklog"
         managed = True
+
+
+class DocumentReport(models.Model):
+    """User-reported staleness. Spec 5.7.
+
+    Inert data by design. A report must never trigger reprocessing on its own:
+    the endpoint is public and transcription plus enrichment cost real money
+    per document, so auto-reprocessing would let anyone loop the endpoint and
+    spend the API budget. The admin queue sorts by report count so genuinely
+    broken records surface first, and a human action is what re-queues.
+    """
+
+    REASONS = [("stale", "stale"), ("wrong_details", "wrong details"),
+               ("dead_link", "dead link"), ("spam", "spam"), ("other", "other")]
+    STATUSES = [("open", "open"), ("actioned", "actioned"), ("rejected", "rejected")]
+
+    # SearchDocument is partitioned; a real FK constraint is unavailable.
+    document = models.ForeignKey("search.SearchDocument", on_delete=models.DO_NOTHING,
+                                 db_constraint=False, related_name="reports")
+    reason = models.CharField(max_length=24, choices=REASONS)
+    note = models.TextField(blank=True)
+    reporter_ip_hash = models.CharField(max_length=64)   # rate limiting only
+    status = models.CharField(max_length=16, choices=STATUSES, default="open")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["document", "reason", "reporter_ip_hash"],
+                name="uniq_report_per_reporter_reason",
+            )
+        ]
+        indexes = [models.Index(fields=["status", "-created_at"],
+                                name="report_status_created")]
