@@ -132,8 +132,20 @@ FACETS: dict[str, list[FacetDef]] = {
 }
 
 
+def _spec_facet_def(key: str) -> FacetDef | None:
+    """A promoted SpecKey is a valid filter key even though it is not in the
+    static registry. Still a whitelist -- is_facetable is the gate."""
+    from search.models import SpecKey
+
+    sk = SpecKey.objects.filter(key=key, is_facetable=True).first()
+    if sk is None:
+        return None
+    return FacetDef(key=sk.key, label_en=sk.label_en, label_dv=sk.label_dv,
+                    widget=sk.widget, storage="spec", path=sk.key, unit=sk.unit)
+
+
 def facet_def(doc_type: str | None, key: str) -> FacetDef | None:
     for f in FACETS.get(doc_type or "all", ALL_FACETS):
         if f.key == key:
             return f
-    return None
+    return _spec_facet_def(key)

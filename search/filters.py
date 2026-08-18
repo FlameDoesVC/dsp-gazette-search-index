@@ -151,6 +151,32 @@ def filter_sql(filters: list[Filter]) -> tuple[str, dict]:
                 parts.append("(d.expires_at IS NOT NULL AND d.expires_at < now())")
             clauses.append("(" + " OR ".join(parts) + ")" if parts else "TRUE")
 
+        elif d.storage == "spec":
+            # A promoted SpecKey lives in the DocumentSpec side table. The
+            # key is registry-controlled and every value is bound, so this is
+            # still a whitelisted filter.
+            sub = ("EXISTS (SELECT 1 FROM search_documentspec sp "
+                   "JOIN search_speckey sk ON sk.id = sp.key_id "
+                   "WHERE sp.document_id = d.id AND sk.key = %({p}_key)s AND {cond})")
+            params[f"{p}_key"] = d.key
+            if f.op == "range":
+                conds = []
+                if f.lo is not None:
+                    conds.append(f"sp.value_num >= %({p}_lo)s")
+                    params[f"{p}_lo"] = f.lo
+                if f.hi is not None:
+                    conds.append(f"sp.value_num <= %({p}_hi)s")
+                    params[f"{p}_hi"] = f.hi
+                cond = " AND ".join(conds) or "TRUE"
+            elif f.op == "bool":
+                cond = ("lower(sp.value_text) IN ('true','yes','1')"
+                        if f.values[0] else
+                        "lower(sp.value_text) NOT IN ('true','yes','1')")
+            else:
+                cond = f"sp.value_text = ANY(%({p})s)"
+                params[p] = list(f.values)
+            clauses.append(sub.format(p=p, cond=cond))
+
         elif f.op == "range":
             expr = _expr(d)
             cast = expr if d.storage == "column" else f"({expr})::numeric"

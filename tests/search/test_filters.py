@@ -2,6 +2,10 @@ import pytest
 
 from search.filters import Filter, FilterError, filter_sql, parse_filters
 
+# parse_filters resolves unknown keys against the SpecKey registry (P7), so
+# the whole module needs a DB connection now.
+pytestmark = pytest.mark.django_db
+
 
 def test_enum_filter():
     fs = parse_filters(["job_category:Accounting"], "job")

@@ -315,6 +315,14 @@ def compute_facets(doc_type, filters, params, fsql) -> list[dict]:
                 entry = _toggle_facet(cur, cte, params, d)
             if entry is not None:
                 out.append(entry)
+
+    # Dynamic shopping facets append to the same ordered list, which is why
+    # the API returns a list and not a map (spec 9). Universal facets are
+    # computed above and are not subject to the discovery thresholds.
+    if doc_type == "shopping":
+        from search.specs.discovery import discover_facets
+        with connection.cursor() as cur:
+            out.extend(discover_facets(cte, params, cur))
     return out
 
 
