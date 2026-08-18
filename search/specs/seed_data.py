@@ -1,0 +1,111 @@
+"""Initial registry rows. Spec 4.4.
+
+Not invented: every key below appears in the ProductInfo frequency table in
+spec 4.4 with its corpus count, or in the key_raw frequency query recorded in
+docs/superpowers/measurements/2026-08-p4-enrichment.md. Read that file before
+adding to this list -- a key nobody's data contains is a filter nobody sees.
+"""
+
+SEED_KEYS = [
+    # --- shopping, from ProductInfo ---
+    {"key": "item_condition", "label_en": "Condition", "label_dv": "ޙާލަތު",
+     "datatype": "enum", "widget": "checkbox", "priority": 10,
+     "is_facetable": True, "value_aliases": {}, "categories": []},
+    {"key": "brand", "label_en": "Brand", "label_dv": "ބްރޭންޑް",
+     "datatype": "enum", "widget": "checkbox", "priority": 20,
+     "is_facetable": True, "categories": [],
+     # 999 rows say 'Apple (iPhone)' and 111 say 'Apple'. One checkbox.
+     "value_aliases": {"Apple (iPhone)": "Apple", "APPLE": "Apple",
+                       "Samsung (Galaxy)": "Samsung"}},
+    {"key": "type", "label_en": "Type", "label_dv": "ބާވަތް",
+     "datatype": "enum", "widget": "checkbox", "priority": 30,
+     "is_facetable": True, "value_aliases": {},
+     # Scoped, because `Type` means Guest House for property, LED for
+     # televisions, Laptop/Notebook for computers and Action and Adventure for
+     # video games. One key, four unrelated vocabularies.
+     "categories": ["Televisions", "Computers", "Mobile Phones",
+                    "Video Games", "Audio"]},
+
+    # --- units, for the extractor ---
+    {"key": "voltage", "label_en": "Voltage", "label_dv": "ވޯލްޓޭޖް",
+     "datatype": "numeric", "unit": "V", "unit_aliases": ["v", "volt", "volts"],
+     "widget": "range", "priority": 40, "is_facetable": True,
+     "value_aliases": {}, "categories": []},
+    {"key": "current", "label_en": "Current", "label_dv": "ކަރަންޓް",
+     "datatype": "numeric", "unit": "A", "unit_aliases": ["a", "amp", "amps"],
+     "widget": "range", "priority": 41, "is_facetable": True,
+     "value_aliases": {}, "categories": []},
+    {"key": "power", "label_en": "Power", "label_dv": "ބާރު",
+     "datatype": "numeric", "unit": "W", "unit_aliases": ["w", "watt", "watts"],
+     "widget": "range", "priority": 42, "is_facetable": True,
+     "value_aliases": {}, "categories": []},
+    {"key": "storage_gb", "label_en": "Storage", "label_dv": "ސްޓޯރޭޖް",
+     "datatype": "numeric", "unit": "GB", "unit_aliases": ["gb", "gigabyte"],
+     "widget": "range", "priority": 21, "is_facetable": True,
+     "value_aliases": {}, "categories": ["Mobile Phones", "Computers"]},
+    {"key": "screen_size", "label_en": "Screen size", "label_dv": "ސްކްރީން",
+     "datatype": "numeric", "unit": "inch", "unit_aliases": ["inch", "inches", '"'],
+     "widget": "range", "priority": 22, "is_facetable": True,
+     "value_aliases": {}, "categories": ["Televisions", "Computers",
+                                         "Mobile Phones"]},
+    {"key": "battery_mah", "label_en": "Battery", "label_dv": "ބެޓެރީ",
+     "datatype": "numeric", "unit": "mAh", "unit_aliases": ["mah"],
+     "widget": "range", "priority": 23, "is_facetable": True,
+     "value_aliases": {}, "categories": ["Mobile Phones"]},
+
+    # --- property, from ProductInfo ---
+    {"key": "neighborhood", "label_en": "Neighbourhood", "label_dv": "އަވަށް",
+     "datatype": "enum", "widget": "checkbox", "priority": 11,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "room_facilities", "label_en": "Facilities", "label_dv": "ވަޞީލަތްތައް",
+     "datatype": "enum", "widget": "checkbox", "priority": 50,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "lift", "label_en": "Lift", "label_dv": "ލިފްޓް",
+     "datatype": "bool", "widget": "toggle", "priority": 60,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "floor", "label_en": "Floor", "label_dv": "ފަންގިފިލާ",
+     "datatype": "enum", "widget": "checkbox", "priority": 61,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "furnishing", "label_en": "Furnishing", "label_dv": "ފަރުނީޗަރު",
+     "datatype": "enum", "widget": "checkbox", "priority": 52,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "bedrooms", "label_en": "Bedrooms", "label_dv": "ކޮޓަރި",
+     "datatype": "numeric", "widget": "checkbox", "priority": 12,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "bathrooms", "label_en": "Bathrooms", "label_dv": "ފާޚާނާ",
+     "datatype": "numeric", "widget": "checkbox", "priority": 13,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "ideal_tenants", "label_en": "Tenants", "label_dv": "ކުއްޔަށްހިފާ",
+     "datatype": "enum", "widget": "checkbox", "priority": 53,
+     "is_facetable": True, "value_aliases": {},
+     "categories": ["Housing & Real Estate"]},
+    {"key": "square_feet", "label_en": "Square feet", "label_dv": "އަކަފޫޓު",
+     "datatype": "numeric", "unit": "sqft", "unit_aliases": ["sqft", "sq ft"],
+     "widget": "range", "priority": 54, "is_facetable": True,
+     "value_aliases": {}, "categories": ["Housing & Real Estate"]},
+
+    # --- jobs, from ProductInfo ---
+    {"key": "position_type", "label_en": "Position type",
+     "label_dv": "ވަޒީފާގެ ބާވަތް", "datatype": "enum", "widget": "checkbox",
+     "priority": 14, "is_facetable": True, "value_aliases": {},
+     "categories": ["Jobs"]},
+    {"key": "job_category", "label_en": "Job category", "label_dv": "ދާއިރާ",
+     "datatype": "enum", "widget": "checkbox", "priority": 15,
+     "is_facetable": True, "value_aliases": {}, "categories": ["Jobs"]},
+    {"key": "employer", "label_en": "Employer", "label_dv": "ވަޒީފާދޭ ފަރާތް",
+     "datatype": "enum", "widget": "checkbox", "priority": 16,
+     "is_facetable": True, "value_aliases": {}, "categories": ["Jobs"]},
+    {"key": "salary_range", "label_en": "Salary range", "label_dv": "މުސާރަ",
+     "datatype": "enum", "widget": "checkbox", "priority": 17,
+     "is_facetable": False, "value_aliases": {}, "categories": ["Jobs"]},
+    {"key": "apply_before", "label_en": "Apply before", "label_dv": "ސުންގަޑި",
+     "datatype": "enum", "widget": "checkbox", "priority": 18,
+     "is_facetable": False, "value_aliases": {}, "categories": ["Jobs"]},
+]
