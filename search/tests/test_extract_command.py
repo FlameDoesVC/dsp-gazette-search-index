@@ -48,13 +48,11 @@ def test_sparse_pdf_is_queued_for_transcription(job_with_pdf, monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        transcribe, "transcribe_batch",
-        lambda items: {
-            items[0].custom_id: ExtractionResult(
-                text="ޓްރާންސްކްރައިބްޑް", method="transcribed",
-                status="ok", transcribed=True,
-            )
-        },
+        transcribe, "transcribe_pdf",
+        lambda content, **kw: ExtractionResult(
+            text="ޓްރާންސްކްރައިބްޑް", method="transcribed",
+            status="ok", transcribed=True,
+        ),
     )
     call_command("extract_attachments", stdout=StringIO())
     a = Attachment.objects.get()
@@ -102,17 +100,14 @@ def test_measure_then_transcribe_actually_transcribes(job_with_pdf, monkeypatch)
     )
     call_command("extract_attachments", "--no-transcribe", stdout=StringIO())
 
-    def _fake_batch(items):
-        assert items, "the paid run found nothing to do"
-        return {
-            i.custom_id: ExtractionResult(
-                text="transcribed body", method="transcribed",
-                status="ok", transcribed=True,
-            )
-            for i in items
-        }
+    def _fake_pdf(content, **kw):
+        assert content, "the paid run found nothing to do"
+        return ExtractionResult(
+            text="transcribed body", method="transcribed",
+            status="ok", transcribed=True,
+        )
 
-    monkeypatch.setattr(transcribe, "transcribe_batch", _fake_batch)
+    monkeypatch.setattr(transcribe, "transcribe_pdf", _fake_pdf)
     call_command("extract_attachments", stdout=StringIO())
 
     a = Attachment.objects.get()
@@ -211,41 +206,3 @@ def test_a_local_extraction_failure_is_not_recorded_as_a_fetch_failure(
     assert a.status == "extract_failed"
     assert "not a zip" in a.error
 
-
-@pytest.mark.django_db
-def test_the_transcription_queue_respects_batch_size(db, monkeypatch):
-    """A run of consecutive scanned PDFs must not accumulate unbounded --
-    every queued item holds the whole file in memory (spec 12.4)."""
-    from search.extract import local, transcribe
-    from gazette.models import Iulaan
-
-    iulaan = Iulaan.objects.create(id="IUL-1", title="t", additional_info={},
-                                   attachments=[], body="b")
-    for i in range(7):
-        Attachment.objects.create(iulaan=iulaan, url=f"https://x/{i}.pdf",
-                                  role="main", status="pending")
-
-    monkeypatch.setattr(
-        local, "extract_pdf_text_layer",
-        lambda c: ExtractionResult(text="x", page_count=3, chars_per_page=10,
-                                   method="pdftotext", status="ok"),
-    )
-    monkeypatch.setattr(
-        "search.extract.fetch.fetch_bytes", lambda url: (b"pdf", "sha")
-    )
-
-    seen = []
-
-    def _fake_batch(items):
-        seen.append(len(items))
-        return {
-            i.custom_id: ExtractionResult(text="t", method="transcribed",
-                                          status="ok", transcribed=True)
-            for i in items
-        }
-
-    monkeypatch.setattr(transcribe, "transcribe_batch", _fake_batch)
-    call_command("extract_attachments", "--batch-size", "3", stdout=StringIO())
-
-    assert seen, "nothing was transcribed"
-    assert max(seen) <= 3, f"batch grew to {max(seen)}, cap was 3"

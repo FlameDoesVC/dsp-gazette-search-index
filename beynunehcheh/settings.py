@@ -265,6 +265,20 @@ USE_I18N = True
 LANGUAGES = [("en", "English"), ("dv", "Dhivehi")]
 LOCALE_PATHS = [BASE_DIR / "locale"]
 
+# --- OCR for scanned attachments (spec 5.6, superseded rung 3) ---
+GOOGLE_VISION_API_KEY = os.getenv("GOOGLE_VISION_API_KEY",
+                                  os.getenv("VISION_API_KEY", ""))
+OCR_DPI = int(os.getenv("OCR_DPI", "300"))
+OCR_REPAIR_MODEL = os.getenv(
+    "OCR_REPAIR_MODEL", "alakxender/t5-dhivehi-typo-corrector-asr"
+)
+# Below this the transcription is not describing the document it is attached
+# to. Measured: 0% for a fabrication, 87% for a good page.
+OCR_ANCHOR_MIN = float(os.getenv("OCR_ANCHOR_MIN", "0.30"))
+OCR_CACHE_ENABLED = os.getenv("OCR_CACHE_ENABLED", "1") == "1"
+OCR_CACHE_DIR = os.getenv("OCR_CACHE_DIR", str(BASE_DIR / ".cache" / "ocr"))
+OCR_CACHE_SIZE_BYTES = int(os.getenv("OCR_CACHE_SIZE_BYTES", str(8 * 1024**3)))
+
 # Maldives Retirement Pension Scheme. Settings, not constants, because tax
 # treatment changes and hardcoding it is how a search engine starts lying.
 # Spec 4.3.2.

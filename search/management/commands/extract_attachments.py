@@ -1,10 +1,16 @@
 """Run the extraction ladder over gazette attachments. Spec 5.6.
 
 Ladder, cheapest first:
-  1. .docx via python-docx           -- free, no OCR
-  2. PDF with a text layer           -- free, pdftotext
-  3. scanned PDF                     -- Claude Haiku 4.5, batched
+  1. .docx via python-docx      -- free, no OCR
+  2. PDF with a text layer      -- free, pdftotext
+  3. scanned PDF                -- Google Vision OCR, then fili repair by a
+                                   60M T5 on CPU, then a consonant-skeleton
+                                   gate and an anchor check against the
+                                   iulaan's own title and office
   4. give up, record ocr_failed
+
+Rung 3 replaced a Claude-native-PDF rung that fabricated on real scans (0%
+anchor overlap). See docs/superpowers/measurements/2026-08-18-p3-attachments.md.
 
 Order the corpus jobs-first: jobs are where attachment detail is load-bearing,
 and only 16 of 306 iulaan state salary in the body.
@@ -28,7 +34,6 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--type", dest="doc_type", default=None)
         parser.add_argument("--limit", type=int, default=None)
-        parser.add_argument("--batch-size", type=int, default=50)
         parser.add_argument(
             "--no-transcribe",
             action="store_true",
@@ -86,8 +91,6 @@ class Command(BaseCommand):
         if options["limit"]:
             pending = pending[: options["limit"]]
 
-        to_transcribe: list[transcribe.TranscriptionItem] = []
-        by_id: dict[str, Attachment] = {}
         done = 0
         scanned = 0
         local_ok = 0
@@ -124,28 +127,21 @@ class Command(BaseCommand):
                     attachment.save()
                     scanned += 1
                     continue
-                to_transcribe.append(
-                    transcribe.TranscriptionItem(
-                        custom_id=str(attachment.id), content=content
-                    )
-                )
-                by_id[str(attachment.id)] = attachment
                 attachment.page_count = result.page_count
                 attachment.chars_per_page = result.chars_per_page
-                # Flush here, not after the local-extraction path: a run of
-                # consecutive scanned PDFs never reaches a check placed below
-                # this `continue`, and each queued item holds a whole PDF.
-                if len(to_transcribe) >= options["batch_size"]:
-                    done += self._flush(to_transcribe, by_id)
-                    to_transcribe, by_id = [], {}
-                continue
+                result = transcribe.transcribe_pdf(
+                    content,
+                    title=attachment.iulaan.title,
+                    office=(attachment.iulaan.office.name
+                            if attachment.iulaan.office else ""),
+                    page_count=result.page_count,
+                )
 
             self._store(attachment, result)
-            done += 1
-            local_ok += 1
-
-        if to_transcribe:
-            done += self._flush(to_transcribe, by_id)
+            if result.method == "transcribed":
+                done += 1
+            else:
+                local_ok += 1
 
         if options["no_transcribe"]:
             total = scanned + local_ok
@@ -156,18 +152,6 @@ class Command(BaseCommand):
             ))
         else:
             self.stdout.write(self.style.SUCCESS(f"extracted {done} attachments"))
-
-    def _flush(self, items, by_id) -> int:
-        self.stdout.write(f"transcribing {len(items)} scanned PDFs...")
-        results = transcribe.transcribe_batch(items)
-        count = 0
-        for custom_id, result in results.items():
-            attachment = by_id.get(custom_id)
-            if attachment is None:
-                continue
-            self._store(attachment, result)
-            count += 1 if result.status == "ok" else 0
-        return count
 
     def _store(self, attachment: Attachment, result) -> None:
         attachment.text = (result.text or "")[: Attachment.TEXT_CAP]

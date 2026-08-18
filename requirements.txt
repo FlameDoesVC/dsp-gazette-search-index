@@ -60,3 +60,6 @@ anthropic==0.122.0
 pydantic==2.13.4
 pytest-asyncio==1.4.0
 django-ninja==1.5.0
+torch==2.13.0
+transformers==5.15.0
+sentencepiece==0.2.2
