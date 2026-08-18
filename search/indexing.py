@@ -78,6 +78,13 @@ def _row(draft: DocumentDraft) -> SearchDocument:
         title=draft.title_en or draft.title_dv,
         price=draft.price,
     )
+    # Keyword stuffing penalised through the existing `quality` term (P9 task
+    # 6): repetition inflates ts_rank_cd, so a stuffed title wins lexically
+    # while saying less.
+    from search.rank_signals import stuffing_penalty
+    quality = max(0.0, float(draft.quality or 0.0) - stuffing_penalty(
+        draft.title_en or draft.title_dv
+    ))
     return SearchDocument(
         source=draft.source,
         source_key=draft.source_key,
@@ -99,7 +106,7 @@ def _row(draft: DocumentDraft) -> SearchDocument:
         attrs=draft.attrs,
         card=card,
         thumbnails=draft.thumbnails,
-        quality=draft.quality,
+        quality=quality,
         content_hash=draft.content_hash,
         stale_marked_at=None,   # a successful pass clears the work ticket
         category_leaf=category_leaf,
