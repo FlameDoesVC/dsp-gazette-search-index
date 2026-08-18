@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { Bidi } from "@/components/Bidi";
 import { Disclosure } from "@/components/Disclosure";
-import { SourceBadge } from "@/components/SourceBadge";
 import type { ResultOut } from "@/lib/api";
 import { formatApprox, formatDate } from "@/lib/format";
 import { ApplyBlock } from "@/components/detail/ApplyBlock";
 import { CompensationTable } from "@/components/detail/CompensationTable";
+import { CardShell } from "./CardShell";
 
 const APPLY_LABEL: Record<string, string> = {
   form: "Apply via form",
@@ -39,46 +39,37 @@ export function JobCard({ result }: { result: ResultOut }) {
     | null;
 
   return (
-    <article className="card">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <Bidi
-            as="h3"
-            text={(c.role as string) || result.title}
-            className="truncate text-base font-semibold"
-          />
-          <Bidi as="p" text={c.employer as string} className="text-sm text-muted" />
-        </div>
-        <SourceBadge sourceKey={result.source} />
-      </div>
-
-      <div className="mt-2">
-        {/* Rendered verbatim. Already resolved server-side to one of three
-            strings; the frontend never interprets a null into 'Negotiable'. */}
-        <p className="text-[15px] font-medium">{c.salary_display as string}</p>
-
-        {est && (
-          <p data-testid="net-estimate" className="mt-0.5 text-xs text-muted">
-            {est.is_floor ? "at least " : ""}
-            {formatApprox(est.value)} take-home{" "}
-            <button
-              type="button"
-              onClick={() => setShowAssumptions((v) => !v)}
-              className="underline underline-offset-2"
-              aria-expanded={showAssumptions}
-            >
-              assumptions
-            </button>
-          </p>
-        )}
-        {showAssumptions && est && (
-          <p className="mt-1 rounded bg-chip px-2 py-1 text-xs text-muted">
-            Estimated from the stated line items over {est.working_days} working days,
-            less 7% pension on basic salary. Not a figure the employer stated.
-          </p>
-        )}
-      </div>
-
+    <CardShell
+      result={result}
+      title={(c.role as string) || result.title}
+      summary={result.summary || undefined}
+      highlight={
+        /* Rendered verbatim. Already resolved server-side to one of three
+            strings; the frontend never interprets a null into 'Negotiable'. */
+        <>{c.salary_display as string}</>
+      }
+    >
+      <Bidi as="p" text={c.employer as string} className="text-sm text-muted" />
+      {est && (
+        <p data-testid="net-estimate" className="mt-0.5 text-xs text-muted">
+          {est.is_floor ? "at least " : ""}
+          {formatApprox(est.value)} take-home{" "}
+          <button
+            type="button"
+            onClick={() => setShowAssumptions((v) => !v)}
+            className="underline underline-offset-2"
+            aria-expanded={showAssumptions}
+          >
+            assumptions
+          </button>
+        </p>
+      )}
+      {showAssumptions && est && (
+        <p className="mt-1 rounded bg-chip px-2 py-1 text-xs text-muted">
+          Estimated from the stated line items over {est.working_days} working days,
+          less 7% pension on basic salary. Not a figure the employer stated.
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         {c.grade ? <span>{c.grade as string}</span> : null}
         {c.position_type ? <span>{c.position_type as string}</span> : null}
@@ -97,7 +88,6 @@ export function JobCard({ result }: { result: ResultOut }) {
           </span>
         ) : null}
       </div>
-
       {(c.apply_kinds as string[])?.length ? (
         <div className="mt-2 flex gap-1.5">
           {(c.apply_kinds as string[]).map((k) => (
@@ -112,7 +102,6 @@ export function JobCard({ result }: { result: ResultOut }) {
           ))}
         </div>
       ) : null}
-
       <Disclosure label="Details">
         {(c.qualifications as string[])?.length > 0 && (
           <div className="mb-2">
@@ -141,6 +130,6 @@ export function JobCard({ result }: { result: ResultOut }) {
           kind: string; value: string; label_en?: string; label_dv?: string;
         }[]) ?? []} />
       </Disclosure>
-    </article>
+    </CardShell>
   );
 }

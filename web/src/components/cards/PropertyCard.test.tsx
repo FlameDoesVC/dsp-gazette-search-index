@@ -32,10 +32,9 @@ describe("PropertyCard", () => {
     expect(screen.getByText(/4/)).toBeInTheDocument();
   });
 
-  it("renders a placeholder rather than a broken image when there is none", () => {
-    render(<PropertyCard result={propertyBedSpace} />);
-    expect(screen.queryByRole("img")).toBeNull();
-    expect(screen.getByTestId("no-image")).toBeInTheDocument();
+  it("renders nothing rather than a broken image when there is none", () => {
+    const { container } = render(<PropertyCard result={propertyBedSpace} />);
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("renders tenant preference as chips", () => {
