@@ -179,3 +179,11 @@ python manage.py reindex --stale                 # clears the flag
 
 Running `reindex --stale` first clears the flag and the paid stages then find
 nothing. Every command in the chain reports its count before spending.
+
+## Scheduled jobs
+
+| Command | Cadence | Why |
+|---|---|---|
+| `create_log_partitions --months 3` | monthly | Log tables are RANGE-partitioned; a missed run lands rows in DEFAULT, where retention cannot drop them cheaply. |
+| `prune_logs --days 90` | monthly | Raw query text expires (spec 16.3). |
+| `rebuild_suggest_terms` | after each full reindex | The term table is derived from titles. |

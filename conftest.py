@@ -13,3 +13,5 @@ def pytest_configure(config):
     from django.conf import settings
 
     settings.STREAM_DB_ALIAS = os.environ["STREAM_DB_ALIAS"]
+    settings.SEARCH_LOGGING_SYNC = True
+    settings.SEARCH_LOGGING_ENABLED = True

@@ -263,6 +263,13 @@ PENSION_RATE = float(os.getenv("PENSION_RATE", "0.07"))
 PENSION_BASE = os.getenv("PENSION_BASE", "basic")   # basic | gross
 DEFAULT_WORKING_DAYS = int(os.getenv("DEFAULT_WORKING_DAYS", "20"))
 
+# --- query and click logging (spec 16.3) ---
+SEARCH_LOGGING_ENABLED = os.getenv("SEARCH_LOGGING_ENABLED", "1") == "1"
+SEARCH_LOG_SALT = os.getenv("SEARCH_LOG_SALT", SECRET_KEY)
+# Synchronous in tests: a thread pool plus pytest-django's transactional
+# rollback is a race, not a test. conftest.py flips this on.
+SEARCH_LOGGING_SYNC = False
+
 # Draft overlays run between adapter.to_document() and upsert. `search` knows
 # only these dotted paths; it never imports `enrich`.
 SEARCH_DRAFT_OVERLAYS = [
