@@ -86,6 +86,7 @@ candidates AS MATERIALIZED (
            ) AS trg
     FROM search_searchdocument d, q
     WHERE d.is_active
+      AND NOT d.is_duplicate
       AND (
             (q.q_en    IS NOT NULL AND d.vector_en    @@ q.q_en)
          OR (q.q_dv    IS NOT NULL AND d.vector_dv    @@ q.q_dv)
@@ -287,6 +288,7 @@ WITH q AS (
 candidates AS MATERIALIZED (
     SELECT d.* FROM search_searchdocument d, q
     WHERE d.is_active
+      AND NOT d.is_duplicate
       AND (
             (q.q_en    IS NOT NULL AND d.vector_en    @@ q.q_en)
          OR (q.q_dv    IS NOT NULL AND d.vector_dv    @@ q.q_dv)

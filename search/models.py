@@ -70,6 +70,14 @@ class SearchDocument(models.Model):
     # array element is avoidable work. Spec 4.4.
     category_leaf = models.CharField(max_length=128, blank=True, db_index=True)
 
+    # Set by `dedupe_listings`, not by the adapter. A separate flag rather than
+    # reusing `is_active`: that one is derived from the source and would be
+    # overwritten on the next reindex, so the two would fight.
+    is_duplicate = models.BooleanField(default=False)
+    # How many rows this one stands for, including itself.
+    duplicate_count = models.IntegerField(default=1)
+    dedupe_key = models.CharField(max_length=64, blank=True)
+
     # ranking and bookkeeping
     quality = models.FloatField(default=0.0)
     content_hash = models.CharField(max_length=64, blank=True)

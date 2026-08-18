@@ -63,3 +63,19 @@ amendment; 4a's diversity cap is the landed mechanism. Eval cases added:
 `iphone -> phone`, `iphone case -> case`, `iphone charger -> charger` with
 accessory fixtures that outmatch the phone lexically, so the regression cannot
 return silently.
+
+## Task 5: dedupe listings
+
+| | Before | After |
+|---|---|---|
+| live iBay docs | 20,445 | 12,486 |
+| flagged duplicates | 0 | 7,959 |
+| groups | - | 1,451 |
+
+The plan measured 1,808 groups / 8,089 rows from a raw-title count; the
+`dedupe_key` (seller + normalized title + price) lands slightly lower because
+it splits on seller/price. Still ~40% of the corpus. `room daily rent`
+(previously hundreds of copies) now returns one survivor per group.
+
+`dedupe_listings` added to the scheduled-jobs runbook -- must run after every
+reindex.

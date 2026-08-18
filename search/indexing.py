@@ -51,7 +51,7 @@ _UPDATE_FIELDS = [
     "price", "currency", "location", "island", "atoll",
     "published_at", "expires_at", "is_active",
     "attrs", "card", "thumbnails", "quality", "content_hash",
-    "stale_marked_at", "category_leaf",
+    "stale_marked_at", "category_leaf", "dedupe_key",
 ]
 
 
@@ -67,6 +67,17 @@ def _row(draft: DocumentDraft) -> SearchDocument:
     card = dict(draft.card or {})
     if category_leaf and not card.get("category_leaf"):
         card["category_leaf"] = category_leaf
+    # So the frontend can render "N similar listings" (P9 task 5 step 7).
+    card.setdefault("duplicate_count", 1)
+    # Repost collapsing (P9 task 5): computed once at index time so search
+    # filters it for free, never per query.
+    from search.dedupe import dedupe_key
+    dedupe_key_value = dedupe_key(
+        source=draft.source,
+        seller=draft.card.get("seller_name") or draft.attrs.get("seller_id", ""),
+        title=draft.title_en or draft.title_dv,
+        price=draft.price,
+    )
     return SearchDocument(
         source=draft.source,
         source_key=draft.source_key,
@@ -92,6 +103,7 @@ def _row(draft: DocumentDraft) -> SearchDocument:
         content_hash=draft.content_hash,
         stale_marked_at=None,   # a successful pass clears the work ticket
         category_leaf=category_leaf,
+        dedupe_key=dedupe_key_value,
     )
 
 
