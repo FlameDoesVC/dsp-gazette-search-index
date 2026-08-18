@@ -51,7 +51,7 @@ _UPDATE_FIELDS = [
     "price", "currency", "location", "island", "atoll",
     "published_at", "expires_at", "is_active",
     "attrs", "card", "thumbnails", "quality", "content_hash",
-    "stale_marked_at",
+    "stale_marked_at", "category_leaf",
 ]
 
 
@@ -61,6 +61,12 @@ def _row(draft: DocumentDraft) -> SearchDocument:
     # means no future adapter can reintroduce a swap (P5 task 0C).
     title_en, title_dv = route_bilingual(draft.title_en, draft.title_dv)
     summary_en, summary_dv = route_bilingual(draft.summary_en, draft.summary_dv)
+    # The leaf category drives ranking and faceting (P9 task 4).
+    path = draft.attrs.get("category_path") or []
+    category_leaf = str(path[-1]) if path else ""
+    card = dict(draft.card or {})
+    if category_leaf and not card.get("category_leaf"):
+        card["category_leaf"] = category_leaf
     return SearchDocument(
         source=draft.source,
         source_key=draft.source_key,
@@ -80,11 +86,12 @@ def _row(draft: DocumentDraft) -> SearchDocument:
         expires_at=draft.expires_at,
         is_active=draft.is_active,
         attrs=draft.attrs,
-        card=draft.card,
+        card=card,
         thumbnails=draft.thumbnails,
         quality=draft.quality,
         content_hash=draft.content_hash,
         stale_marked_at=None,   # a successful pass clears the work ticket
+        category_leaf=category_leaf,
     )
 
 

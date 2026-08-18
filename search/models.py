@@ -65,6 +65,10 @@ class SearchDocument(models.Model):
     card = models.JSONField(default=dict, blank=True)
     card_version = models.IntegerField(default=1)
     thumbnails = models.JSONField(default=list, blank=True)
+    # The leaf of attrs['category_path'] (e.g. "Mobile Phones"), denormalized
+    # because ranking and faceting both aggregate it per request and a JSONB
+    # array element is avoidable work. Spec 4.4.
+    category_leaf = models.CharField(max_length=128, blank=True, db_index=True)
 
     # ranking and bookkeeping
     quality = models.FloatField(default=0.0)

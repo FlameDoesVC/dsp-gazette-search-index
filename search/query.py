@@ -16,7 +16,7 @@ from django.db import connection
 
 from search.facets import FACETS, FacetDef, facet_def
 from search.filters import Filter, _array_expr, _expr, filter_sql
-from search.interleave import interleave
+from search.interleave import interleave, interleave_by
 from search.lang import QueryPlan, build_query_plan
 
 
@@ -33,6 +33,7 @@ class SearchResult:
     score: float
     matched_lang: str
     thumbnails: list = field(default_factory=list)
+    category_leaf: str = ""
 
 
 @dataclass(slots=True)
@@ -99,11 +100,12 @@ scored AS (
 )
 SELECT id, source, source_key, doc_type, url,
        title_en, title_dv, summary_en, summary_dv, card, price, thumbnails,
+       category_leaf,
        r_en, r_dv, r_latin, score,
        count(*) OVER () AS total
 FROM scored
 ORDER BY {order_by}
-LIMIT %(limit)s OFFSET %(offset)s
+LIMIT %(candidate_limit)s
 """
 
 _SCORE_EXPR = """
@@ -159,7 +161,7 @@ def _base_params(plan: QueryPlan, doc_type, candidate_limit) -> dict:
 def _to_result(row, plan: QueryPlan) -> SearchResult:
     (doc_id, source, source_key, dtype, url,
      title_en, title_dv, summary_en, summary_dv, card,
-     _price, thumbnails,
+     _price, thumbnails, category_leaf,
      r_en, r_dv, r_latin, score, _total) = row
 
     if r_dv and r_dv >= max(r_en, r_latin):
@@ -184,6 +186,7 @@ def _to_result(row, plan: QueryPlan) -> SearchResult:
         matched_lang=matched,
         thumbnails=json.loads(thumbnails) if isinstance(thumbnails, str)
                    else (thumbnails or []),
+        category_leaf=category_leaf or "",
     )
 
 
@@ -199,8 +202,6 @@ def search(
         return []
 
     params = _base_params(plan, doc_type, candidate_limit)
-    params["limit"] = limit
-    params["offset"] = 0
 
     sql = _PAGE_SQL.format(
         filters="",
@@ -212,7 +213,7 @@ def search(
         cur.execute(sql, params)
         rows = cur.fetchall()
 
-    return [_to_result(row, plan) for row in rows]
+    return [_to_result(row, plan) for row in rows[:limit]]
 
 
 def search_page(
@@ -243,8 +244,6 @@ def search_page(
 
     params = _base_params(plan, doc_type, candidate_limit)
     params.update(fparams)
-    params["limit"] = per_page
-    params["offset"] = max(0, (page - 1) * per_page)
 
     sql = _PAGE_SQL.format(
         filters=fsql,
@@ -252,6 +251,11 @@ def search_page(
         order_by=_SORTS.get(sort, _SORTS["relevance"]),
     )
 
+    # The candidate set is fetched in full (capped at 500) and paginated in
+    # Python so interleaving can run over it BEFORE the page is cut. Six
+    # chargers in the top 6 by score cannot be fixed by reordering the 20-row
+    # page -- the phone ranked 13th has to be inside the set being interleaved
+    # (P9 task 4).
     with connection.cursor() as cur:
         cur.execute(sql, params)
         rows = cur.fetchall()
@@ -260,6 +264,11 @@ def search_page(
     results = [_to_result(row, plan) for row in rows]
     if doc_type is None:
         results = interleave(results)
+    elif doc_type == "shopping":
+        # 4b (curated demotion) is superseded by P10 task 1.
+        results = interleave_by(results, key="category_leaf", cap=3)
+    offset = max(0, (page - 1) * per_page)
+    results = results[offset:offset + per_page]
 
     facets = compute_facets(doc_type, filters, params, fsql)
     return SearchPage(results=results, total=int(total), facets=facets,

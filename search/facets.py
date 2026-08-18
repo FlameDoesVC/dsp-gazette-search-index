@@ -94,6 +94,8 @@ PROPERTY_FACETS = [
 SHOPPING_FACETS = [
     _f(key="price", label_en="Price", label_dv="އަގު", widget="range",
        storage="column", path="price", split_by=["currency"]),
+    _f(key="category_leaf", label_en="Category", label_dv="ބާވަތް",
+       widget="checkbox", storage="column", path="category_leaf", top_n=20),
     _f(key="condition", label_en="Condition", label_dv="ޙާލަތު",
        widget="checkbox", storage="attrs", path="condition"),
     _f(key="brand", label_en="Brand", label_dv="ބްރޭންޑް",

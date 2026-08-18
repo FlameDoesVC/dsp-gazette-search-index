@@ -25,7 +25,21 @@ documents:
      title_dv: "ހިކަތި", text_dv: "ހިކަތި"}
   - {source: ibay, source_key: i-phone-1, doc_type: shopping,
      url: "https://ibay.com.mv/1", title_en: "Apple iPhone 13 Pro 256GB",
-     text_en: "apple iphone 13 pro 256gb unlocked"}
+     text_en: "apple iphone 13 pro 256gb unlocked",
+     attrs: {category_path: ["Electronics", "Mobile Phones"]}}
+  # The P9 task 4 regression: accessories are perfect lexical matches for
+  # "iphone" and outrank the phone on ts_rank_cd alone. Category diversity in
+  # the result page must still surface the phone.
+  - {source: ibay, source_key: i-acc-case-1, doc_type: shopping,
+     url: "https://ibay.com.mv/6",
+     title_en: "iPhone 15 Pro Max case cover",
+     text_en: "iphone 15 pro max case cover silicone",
+     attrs: {category_path: ["Electronics", "Cases, Protection & Skins"]}}
+  - {source: ibay, source_key: i-acc-charger-1, doc_type: shopping,
+     url: "https://ibay.com.mv/7",
+     title_en: "iPhone fast charging cable charger",
+     text_en: "iphone fast charging cable charger type c",
+     attrs: {category_path: ["Electronics", "Charger"]}}
   - {source: ibay, source_key: i-wash-1, doc_type: shopping,
      url: "https://ibay.com.mv/2", title_en: "Front load washing machine",
      text_en: "front load washing machine halaalukuvefa hunna"}
@@ -60,7 +74,10 @@ cases:
   - {q: "firihen kudhin",      expect: i-bed-1,    lang: dv-Latn}
   - {q: "halaalukuvefa hunna", expect: i-wash-1,   lang: dv-Latn}
   # English
-  - {q: "iphone 13",           expect: i-phone-1,  lang: en}
+  - {q: "iphone",             expect: i-phone-1,  lang: en}
+  - {q: "iphone 13",          expect: i-phone-1,  lang: en}
+  - {q: "iphone case",        expect: i-acc-case-1, lang: en}
+  - {q: "iphone charger",     expect: i-acc-charger-1, lang: en}
   - {q: "washing machine",     expect: i-wash-1,   lang: en}
   - {q: "power supply",        expect: i-psu-1,    lang: en}
   - {q: "cleaning job",        expect: i-clean-1,  lang: en}

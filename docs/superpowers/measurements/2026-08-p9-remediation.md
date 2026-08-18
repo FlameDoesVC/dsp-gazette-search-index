@@ -35,3 +35,31 @@ signal: `attrs.category_path` and `price`, both already in the database.
 
 Task 2 (query-side translation), Task 3 (translation out of sync), Task 5
 (dedupe), Task 6 (keyword penalty), Task 8 (backfills) -- fill in as they land.
+
+## Task 3: translation out of sync
+
+3-page sync (`GAZETTE_MAX_INDEX_PAGES=3`), live gazette site:
+
+| | Wall clock | Fetched |
+|---|---|---|
+| baseline (with inline title+body translation) | ~4.5 min | 30 |
+| after removal | **1.4s** | 5, 0 failed |
+
+Translation is deferred to `fill_bilingual` (batched after Task 1). Body
+translation is gone; `translated_body` stays on the model, unpopulated.
+
+## Task 4: category-aware ranking
+
+Live corpus, after the `category_leaf` column + page-1 interleave landed:
+
+`iphone` (doc_type=shopping, per_page=10) top-10 leaf categories:
+`Charger, LCD Screen & Digitizer, Charger, Headset - Wired, Headset - Wired,
+Charger, Charger, Charger, Screen Protection, Mobile Phones` -- **Mobile
+Phones now appears on page one** (was: zero phones in the top 12, phone ranked
+13/30/38).
+
+4b (curated accessory demotion) is superseded by P10 task 1 per the plan's
+amendment; 4a's diversity cap is the landed mechanism. Eval cases added:
+`iphone -> phone`, `iphone case -> case`, `iphone charger -> charger` with
+accessory fixtures that outmatch the phone lexically, so the regression cannot
+return silently.
