@@ -170,6 +170,7 @@ def test_news_card_is_four_things_and_nothing_else():
     assert card["attachment_count"] == 2
     assert set(card) == {
         "source", "title", "summary", "office", "announcement_type",
+        "announcement_type_label",
         "published_at", "external_url", "attachment_count", "is_tender",
     }
 

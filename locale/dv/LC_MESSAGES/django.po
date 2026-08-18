@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-08-18 13:03+0000\n"
+"POT-Creation-Date: 2026-08-18 16:59+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,62 +17,108 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: search/vocab.py:29
+#: search/vocab.py:33
 msgid "Permanent"
 msgstr "ދާއިމީ"
 
-#: search/vocab.py:30
+#: search/vocab.py:34
 msgid "Full-time"
 msgstr "ފުލް ޓައިމް"
 
-#: search/vocab.py:31
+#: search/vocab.py:35
 msgid "Part-time"
 msgstr "ޕާޓް ޓައިމް"
 
-#: search/vocab.py:32
+#: search/vocab.py:36
 msgid "Contract"
 msgstr "ކޮންޓްރެކްޓް"
 
-#: search/vocab.py:33
+#: search/vocab.py:37
 msgid "Temporary"
 msgstr "ވަގުތީ"
 
-#: search/vocab.py:37
+#: search/vocab.py:41
 msgid "Medical"
 msgstr "މެޑިކަލް"
 
-#: search/vocab.py:38
+#: search/vocab.py:42
 msgid "Logistics"
 msgstr "ލޮޖިސްޓިކްސް"
 
-#: search/vocab.py:39
+#: search/vocab.py:43
 msgid "Teaching"
 msgstr "ކިޔަވައިދިނުން"
 
-#: search/vocab.py:40
+#: search/vocab.py:44
 msgid "Administration"
 msgstr "އެޑްމިނިސްޓްރޭޝަން"
 
-#: search/vocab.py:41
+#: search/vocab.py:45
 msgid "Engineering"
 msgstr "އެންޖިނިއަރިން"
 
-#: search/vocab.py:45
+#: search/vocab.py:49
 msgid "New"
 msgstr "އާ"
 
-#: search/vocab.py:46
+#: search/vocab.py:50
 msgid "Used"
 msgstr "ބޭނުންކުރެވިފައިވާ"
 
-#: search/vocab.py:47
+#: search/vocab.py:51
 msgid "Refurbished"
 msgstr "ރިފާރބިޝްޑް"
 
-#: search/vocab.py:51
+#: search/vocab.py:55
 msgid "For rent"
 msgstr "ކުއްޔަށް"
 
-#: search/vocab.py:52
+#: search/vocab.py:56
 msgid "For sale"
 msgstr "ވިއްކުމަށް"
+
+#: search/vocab.py:57
+msgid "Wanted"
+msgstr "ބޭނުންވާ"
+
+#: search/vocab.py:65
+msgid "Job Opportunity"
+msgstr "ވަޒީފާގެ ފުރުޞަތު"
+
+#: search/vocab.py:66
+#, fuzzy
+#| msgid "For rent"
+msgid "For Rent"
+msgstr "ކުއްޔަށް"
+
+#: search/vocab.py:67
+msgid "Wanted to Rent"
+msgstr "ކުއްޔަށް ހިފުން"
+
+#: search/vocab.py:68
+msgid "Tender"
+msgstr "ބީލަން"
+
+#: search/vocab.py:69
+msgid "Auction"
+msgstr "ނީލަން"
+
+#: search/vocab.py:70
+msgid "Works"
+msgstr "މަސައްކަތް"
+
+#: search/vocab.py:71
+msgid "Training"
+msgstr "ތަމްރީނު"
+
+#: search/vocab.py:72
+msgid "Items Wanted"
+msgstr "ގަންނަން ބޭނުންވާ ތަކެތި"
+
+#: search/vocab.py:73
+msgid "Public Information"
+msgstr "ޢާންމު މަޢުލޫމާތު"
+
+#: search/vocab.py:74
+msgid "Notice"
+msgstr "ދެންނެވުން"

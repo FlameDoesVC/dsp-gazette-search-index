@@ -15,11 +15,15 @@ import re
 
 from django.utils.translation import gettext_lazy as _
 
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+_NON_ALNUM = re.compile(r"[^a-z0-9ހ-޿]+")
 
 
 def canonical(value: str) -> str:
-    """'Full-time', 'Full time', 'FULL TIME' -> 'full_time'."""
+    """'Full-time', 'Full time', 'FULL TIME' -> 'full_time'.
+
+    Thaana is preserved (it has no case), so a Dhivehi value like
+    `ބީލަން` canonicalises to itself and can be a catalog key.
+    """
     return _NON_ALNUM.sub("_", (value or "").strip().lower()).strip("_")
 
 
@@ -50,13 +54,59 @@ CONDITION = {
 LISTING_KIND = {
     "rent": _("For rent"),
     "sale": _("For sale"),
+    "wanted": _("Wanted"),
 }
+
+# Gazette announcement types are a fixed vocabulary (the IulaanType table), so
+# their labels live in the catalog, not in machine translation. The keys are
+# the Dhivehi canonical forms; English variants are canonicalised into them
+# before lookup (P9 task 7 step 3).
+ANNOUNCEMENT_TYPE = {
+    "ވަޒީފާގެ ފުރުޞަތު": _("Job Opportunity"),
+    "ކުއްޔަށް ދިނުން": _("For Rent"),
+    "ކުއްޔަށް ހިފުން": _("Wanted to Rent"),
+    "ބީލަން": _("Tender"),
+    "ނީލަން": _("Auction"),
+    "މަސައްކަތް": _("Works"),
+    "ތަމްރީނު": _("Training"),
+    "ގަންނަން ބޭނުންވާ ތަކެތި": _("Items Wanted"),
+    "ޢާންމު މަޢުލޫމާތު": _("Public Information"),
+    "ދެންނެވުން": _("Notice"),
+}
+
+# English variants of IulaanType names collapse into the Dhivehi canonical, so
+# the announcement_type facet has one bucket per concept instead of two (the
+# language-duplicate rows: 'ވަޒީފާގެ ފުރުޞަތު' / 'Job Opportunity'). P9 task 7
+# step 1: canonicalise in the facet layer, never merge rows.
+ANNOUNCEMENT_TYPE_CANONICAL = {
+    "Job Opportunity": "ވަޒީފާގެ ފުރުޞަތު",
+    "For Rent": "ކުއްޔަށް ދިނުން",
+    "Letting": "ކުއްޔަށް ދިނުން",
+    "Need to Rent": "ކުއްޔަށް ހިފުން",
+    "Wanted to Rent": "ކުއްޔަށް ހިފުން",
+    "Public Information": "ޢާންމު މަޢުލޫމާތު",
+    "Auction": "ނީލަން",
+    "Tender": "ބީލަން",
+    "Bids": "ބީލަން",
+    "Work": "މަސައްކަތް",
+    "Works": "މަސައްކަތް",
+    "Items wanted": "ގަންނަން ބޭނުންވާ ތަކެތި",
+    "Items to buy": "ގަންނަން ބޭނުންވާ ތަކެތި",
+    "Training": "ތަމްރީނު",
+}
+
+
+def canonical_announcement_type(name: str) -> str:
+    """Collapse English/other variants into the Dhivehi canonical form."""
+    name = (name or "").strip()
+    return ANNOUNCEMENT_TYPE_CANONICAL.get(name, name)
 
 VOCABULARIES = {
     "position_type": POSITION_TYPE,
     "job_category": JOB_CATEGORY,
     "condition": CONDITION,
     "listing_kind": LISTING_KIND,
+    "announcement_type": ANNOUNCEMENT_TYPE,
 }
 
 

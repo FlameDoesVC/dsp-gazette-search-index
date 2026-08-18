@@ -31,7 +31,11 @@ IULAAN_TYPE_DOC_TYPE = {
     "ވަޒީފާގެ ފުރުޞަތު": "job",
     "Job Opportunity": "job",
     "ކުއްޔަށް ދިނުން": "property",
+    "For Rent": "property",
+    "Letting": "property",
     "ކުއްޔަށް ހިފުން": "property",
+    "Need to Rent": "property",
+    "Wanted to Rent": "property",
 }
 _DEFAULT_DOC_TYPE = "news"
 
@@ -91,6 +95,10 @@ class GazetteAdapter:
         i: Iulaan = raw.payload["iulaan"]
 
         type_name = i.iulaan_type.name if i.iulaan_type else ""
+        # Language-duplicate IulaanType rows ('Job Opportunity' / 'ވަޒީފާގެ
+        # ފުރުޞަތު') collapse into one facet bucket (P9 task 7 step 1).
+        from search.vocab import canonical_announcement_type
+        type_name = canonical_announcement_type(type_name)
         doc_type = IULAAN_TYPE_DOC_TYPE.get(type_name, _DEFAULT_DOC_TYPE)
 
         body_dv = strip_html(i.body)

@@ -158,6 +158,7 @@ def _news_card(a, base: dict) -> dict:
         "summary": base.get("summary", ""),
         "office": a.office,
         "announcement_type": a.announcement_type,
+        "announcement_type_label": label("announcement_type", a.announcement_type),
         "published_at": base.get("published_at"),
         "external_url": base.get("external_url", ""),
         "attachment_count": base.get("attachment_count", 0),

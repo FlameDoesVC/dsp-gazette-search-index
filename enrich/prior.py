@@ -22,14 +22,27 @@ IULAAN_TYPE_MAP = {
     "ވަޒީފާގެ ފުރުޞަތު": "job",
     "Job Opportunity": "job",
     "ކުއްޔަށް ދިނުން": "property",       # letting
+    "For Rent": "property",
+    "Letting": "property",
     "ކުއްޔަށް ހިފުން": "property",       # seeking to rent
+    "Need to Rent": "property",
+    "Wanted to Rent": "property",
     "ޢާންމު މަޢުލޫމާތު": "news",
     "Public Information": "news",
     "ދެންނެވުން": "news",
     "ބީލަން": "news",                    # bids -- a future `tender` type (3.2)
+    "Tender": "news",
+    "Bids": "news",
     "ނީލަން": "news",                    # auctions
+    "Auction": "news",
     "މަސައްކަތް": "news",                # works
+    "Work": "news",
+    "Works": "news",
+    "ތަމްރީނު": "news",                  # training
+    "Training": "news",
     "ގަންނަން ބޭނުންވާ ތަކެތި": "news",   # items wanted
+    "Items wanted": "news",
+    "Items to buy": "news",
     "މުބާރާތް": "news",                  # competitions
 }
 
