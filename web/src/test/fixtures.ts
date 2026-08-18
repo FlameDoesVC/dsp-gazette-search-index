@@ -32,6 +32,12 @@ export const jobResult: ResultOut = {
     grade: "GS3", location: "Male", position_type: "Permanent",
     deadline: "2026-08-31", deadline_state: "open",
     apply_kinds: ["form", "email"],
+    apply_methods: [
+      { kind: "form", value: "https://forms.gle/abc", label_en: "", label_dv: "" },
+      { kind: "email", value: "hr@example.gov.mv", label_en: "", label_dv: "" },
+    ],
+    qualifications: ["Basic medical degree", "Two years experience"],
+    required_documents: ["ID card copy", "Accredited certificates"],
     detail_source: "attachment",
   },
 } as ResultOut;

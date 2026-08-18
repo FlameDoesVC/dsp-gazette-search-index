@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { Bidi } from "@/components/Bidi";
+import { Disclosure } from "@/components/Disclosure";
 import { SourceBadge } from "@/components/SourceBadge";
 import type { ResultOut } from "@/lib/api";
 import { formatApprox, formatDate } from "@/lib/format";
+import { ApplyBlock } from "@/components/detail/ApplyBlock";
+import { CompensationTable } from "@/components/detail/CompensationTable";
 
 const APPLY_LABEL: Record<string, string> = {
   form: "Apply via form",
@@ -109,6 +112,35 @@ export function JobCard({ result }: { result: ResultOut }) {
           ))}
         </div>
       ) : null}
+
+      <Disclosure label="Details">
+        {(c.qualifications as string[])?.length > 0 && (
+          <div className="mb-2">
+            <h4 className="text-xs font-semibold">Qualifications</h4>
+            <ul className="mt-1 space-y-0.5 text-sm text-muted">
+              {(c.qualifications as string[]).map((q) => (
+                <li key={q}>{q}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(c.required_documents as string[])?.length > 0 && (
+          <div className="mb-2">
+            <h4 className="text-xs font-semibold">Required documents</h4>
+            <ul className="mt-1 space-y-0.5 text-sm text-muted">
+              {(c.required_documents as string[]).map((d) => (
+                <li key={d}>{d}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {c.compensation ? (
+          <CompensationTable comp={c.compensation as never} />
+        ) : null}
+        <ApplyBlock methods={(c.apply_methods as never as {
+          kind: string; value: string; label_en?: string; label_dv?: string;
+        }[]) ?? []} />
+      </Disclosure>
     </article>
   );
 }

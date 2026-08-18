@@ -1,7 +1,9 @@
 "use client";
 
 import { Bidi } from "@/components/Bidi";
+import { Disclosure } from "@/components/Disclosure";
 import { SourceBadge } from "@/components/SourceBadge";
+import { SpecTable } from "@/components/detail/SpecTable";
 import type { ResultOut } from "@/lib/api";
 
 export function ShoppingCard({ result }: { result: ResultOut }) {
@@ -60,6 +62,15 @@ export function ShoppingCard({ result }: { result: ResultOut }) {
         </span>
         <SourceBadge sourceKey={result.source} size="sm" />
       </div>
+
+      <Disclosure label="Details">
+        <SpecTable specs={((c.specs as never) ?? []) as {
+          key_raw: string; value_num?: number | null; value_text?: string; unit?: string;
+        }[]} />
+        {c.seller_name && (
+          <p className="mt-1 text-sm text-muted">Seller: {c.seller_name as string}</p>
+        )}
+      </Disclosure>
     </article>
   );
 }

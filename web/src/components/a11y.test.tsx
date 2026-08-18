@@ -65,4 +65,11 @@ describe("cross-cutting", () => {
       expect(a.getAttribute("rel")).toContain("noreferrer");
     });
   });
+
+  it("no component renders a modal, dialog or portal", () => {
+    const { baseElement } = renderAll();
+    expect(baseElement.querySelector('[role="dialog"]')).toBeNull();
+    expect(baseElement.querySelector('[aria-modal="true"]')).toBeNull();
+    expect(baseElement.querySelector("dialog")).toBeNull();
+  });
 });

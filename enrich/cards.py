@@ -103,6 +103,7 @@ def _job_card(a, base: dict) -> dict:
         # raw date only; state is computed at query time
         "deadline": a.deadline,
         "apply_kinds": [m.kind for m in a.apply_methods],
+        "apply_methods": [m.model_dump() for m in a.apply_methods],
         "detail_source": base.get("detail_source", "listing"),
         "source_label": base.get("source_label", ""),
     }

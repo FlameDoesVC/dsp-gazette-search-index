@@ -6,7 +6,7 @@ import type { Compensation } from "@/lib/compensation";
 import { Gallery } from "@/components/detail/Gallery";
 import { SpecTable } from "@/components/detail/SpecTable";
 import { Bidi } from "@/components/Bidi";
-import { ReportDialog } from "@/components/ReportDialog";
+import { ReportForm } from "@/components/ReportForm";
 import { SourceBadge } from "@/components/SourceBadge";
 
 export default async function DocumentPage({
@@ -73,7 +73,7 @@ export default async function DocumentPage({
       )}
 
       <div className="mt-8">
-        <ReportDialog documentId={Number(id)} />
+        <ReportForm documentId={Number(id)} />
       </div>
     </main>
   );

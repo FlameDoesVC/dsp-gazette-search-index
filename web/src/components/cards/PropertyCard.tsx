@@ -1,6 +1,7 @@
 "use client";
 
 import { Bidi } from "@/components/Bidi";
+import { Disclosure } from "@/components/Disclosure";
 import { SourceBadge } from "@/components/SourceBadge";
 import type { ResultOut } from "@/lib/api";
 
@@ -72,6 +73,29 @@ export function PropertyCard({ result }: { result: ResultOut }) {
             />
           ))}
         </div>
+
+        <Disclosure label="Details">
+          <dl className="space-y-1 text-sm text-muted">
+            {c.bedrooms != null && (
+              <div className="flex justify-between gap-4"><dt>Bedrooms</dt><dd>{c.bedrooms as number}</dd></div>
+            )}
+            {c.bathrooms != null && (
+              <div className="flex justify-between gap-4"><dt>Bathrooms</dt><dd>{c.bathrooms as number}</dd></div>
+            )}
+            {c.furnishing && (
+              <div className="flex justify-between gap-4"><dt>Furnishing</dt><dd>{c.furnishing as string}</dd></div>
+            )}
+            {c.floor && (
+              <div className="flex justify-between gap-4"><dt>Floor</dt><dd>{c.floor as string}</dd></div>
+            )}
+            {c.square_feet != null && (
+              <div className="flex justify-between gap-4"><dt>Area</dt><dd>{c.square_feet as number} sqft</dd></div>
+            )}
+            {c.has_lift != null && (
+              <div className="flex justify-between gap-4"><dt>Lift</dt><dd>{c.has_lift ? "Yes" : "No"}</dd></div>
+            )}
+          </dl>
+        </Disclosure>
       </div>
     </article>
   );

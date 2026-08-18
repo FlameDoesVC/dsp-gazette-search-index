@@ -69,4 +69,18 @@ describe("JobCard", () => {
     render(<JobCard result={dhivehiTitleResult} />);
     expect(screen.getByText("ވަޒީފާގެ ފުރުޞަތު")).toHaveAttribute("dir", "rtl");
   });
+
+  it("reveals its detail inline rather than navigating or opening an overlay", async () => {
+    render(<JobCard result={jobResult} />);
+    expect(screen.queryByText(/basic medical degree/i)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /details/i }));
+    expect(screen.getByText(/basic medical degree/i)).toBeInTheDocument();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("shows qualifications and apply methods once expanded", async () => {
+    render(<JobCard result={jobResult} />);
+    await userEvent.click(screen.getByRole("button", { name: /details/i }));
+    expect(screen.getByLabelText(/apply via form/i)).toBeInTheDocument();
+  });
 });
