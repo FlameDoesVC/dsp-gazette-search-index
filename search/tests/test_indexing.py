@@ -26,6 +26,17 @@ def test_insert_creates_a_row():
 
 
 @pytest.mark.django_db
+def test_the_indexer_corrects_a_swapped_draft():
+    upsert_drafts([DocumentDraft(
+        source="gazette", source_key="IUL-1", doc_type="news", url="https://x",
+        title_en="ވަޒީފާގެ ފުރުޞަތު", title_dv="Job Opportunity",
+    )])
+    d = SearchDocument.objects.get()
+    assert d.title_en == "Job Opportunity"
+    assert d.title_dv == "ވަޒީފާގެ ފުރުޞަތު"
+
+
+@pytest.mark.django_db
 def test_reinsert_updates_rather_than_duplicating():
     upsert_drafts([_draft()])
     upsert_drafts([_draft(title_en="Amended notice")])

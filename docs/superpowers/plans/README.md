@@ -37,6 +37,22 @@ things, and several of them swing costs five-fold.
 Four of its six tasks read `QueryLog`, and tuning against an empty table
 produces a ranking fitted to nothing.
 
+## Pending retrofit queue
+
+P1-P7 have landed. These four tasks were written after the phases they correct
+had already shipped, so nothing will reach them in sequence — they must be
+picked up explicitly, in order, from `2026-08-18-search-p5-api.md`.
+
+| Task | State | What it fixes |
+|---|---|---|
+| P5 Task 0 | landed | `--no-transcribe` stranding scanned PDFs; unbounded batch queue; mislabelled extract failures |
+| P5 Task 0B | landed | gazette deadlines and `published_at` never read; `required_documents` |
+| **P5 Task 0C** | **pending** | language fields filled by source assumption; 20,445 documents with no Dhivehi title |
+| **P5 Task 0D** | **pending** | the transcription rung fabricates on real scans (0% anchor overlap) |
+
+0D supersedes rung 3 of spec 5.6. Do 0C first — the frontend is incoherent
+without it, and 0D touches a slice of the corpus nobody is reading yet.
+
 ## Cross-plan contract
 
 These are the names later plans depend on. Changing one is a breaking change
@@ -136,6 +152,11 @@ Spec 3.1, 5.7, 8, 12.1, 12.2, 12.4:
 - `SearchDocument` is partitioned by `source`. FKs pointing at it need
   `db_constraint=False`.
 - Body text is never stored on `SearchDocument` — vectors only.
+- A field named `_en` holds English and `_dv` holds Dhivehi, decided by the
+  **script of the content**, never by the source's default language. Both are
+  always populated. Routed in `search/indexing.py::_row` so no adapter can get
+  it wrong. Filling the missing side is translation, never the query-side
+  transliterator — see P5 Task 0C for the measured comparison.
 - Streaming uses `.iterator(chunk_size=500)` on the `direct` alias.
 - Nothing time-dependent goes in `card`. Raw dates only; `deadline_state`,
   freshness and relative time are computed per request.

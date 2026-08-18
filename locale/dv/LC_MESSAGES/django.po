@@ -1,0 +1,78 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-08-18 13:03+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: search/vocab.py:29
+msgid "Permanent"
+msgstr "ދާއިމީ"
+
+#: search/vocab.py:30
+msgid "Full-time"
+msgstr "ފުލް ޓައިމް"
+
+#: search/vocab.py:31
+msgid "Part-time"
+msgstr "ޕާޓް ޓައިމް"
+
+#: search/vocab.py:32
+msgid "Contract"
+msgstr "ކޮންޓްރެކްޓް"
+
+#: search/vocab.py:33
+msgid "Temporary"
+msgstr "ވަގުތީ"
+
+#: search/vocab.py:37
+msgid "Medical"
+msgstr "މެޑިކަލް"
+
+#: search/vocab.py:38
+msgid "Logistics"
+msgstr "ލޮޖިސްޓިކްސް"
+
+#: search/vocab.py:39
+msgid "Teaching"
+msgstr "ކިޔަވައިދިނުން"
+
+#: search/vocab.py:40
+msgid "Administration"
+msgstr "އެޑްމިނިސްޓްރޭޝަން"
+
+#: search/vocab.py:41
+msgid "Engineering"
+msgstr "އެންޖިނިއަރިން"
+
+#: search/vocab.py:45
+msgid "New"
+msgstr "އާ"
+
+#: search/vocab.py:46
+msgid "Used"
+msgstr "ބޭނުންކުރެވިފައިވާ"
+
+#: search/vocab.py:47
+msgid "Refurbished"
+msgstr "ރިފާރބިޝްޑް"
+
+#: search/vocab.py:51
+msgid "For rent"
+msgstr "ކުއްޔަށް"
+
+#: search/vocab.py:52
+msgid "For sale"
+msgstr "ވިއްކުމަށް"

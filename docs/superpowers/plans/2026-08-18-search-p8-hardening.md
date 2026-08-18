@@ -1123,7 +1123,18 @@ jj commit -m "P8 task 4: ranking tuning against the eval set"
 
 ---
 
-### Task 5: Background title and summary translation
+### Task 5: Ongoing translation maintenance
+
+> **The initial backfill moved to P5 Task 0C.** The frontend cannot render a
+> Dhivehi result page without it, so it is a prerequisite rather than
+> hardening. Task 0C also carries the measured evidence that transliteration
+> is the wrong tool for this and the `route_bilingual` invariant that stops
+> the fields being filled by source assumption. What remains here is the
+> recurring pass over newly-ingested documents; the command, its tests and the
+> failure-mode handling are all specified in Task 0C and are not repeated.
+>
+> Keep from this task: the weekly cadence in the runbook, and the language
+> toggle in step 4 below.
 
 **Files:**
 - Create: `search/management/commands/translate_fields.py`

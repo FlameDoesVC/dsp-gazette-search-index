@@ -17,6 +17,7 @@ from django.utils.module_loading import import_string
 from search.adapters import base
 from search.adapters.base import DocumentDraft
 from search.lang import normalize_text, strip_fili, translit_dv_to_latin
+from search.lang.assign import route_bilingual
 from search.models import SearchDocument
 
 logger = logging.getLogger(__name__)
@@ -55,16 +56,21 @@ _UPDATE_FIELDS = [
 
 
 def _row(draft: DocumentDraft) -> SearchDocument:
+    # Route by content, not by the adapter's assumption about its source. A
+    # field named _en holds English and _dv holds Dhivehi; deciding it here
+    # means no future adapter can reintroduce a swap (P5 task 0C).
+    title_en, title_dv = route_bilingual(draft.title_en, draft.title_dv)
+    summary_en, summary_dv = route_bilingual(draft.summary_en, draft.summary_dv)
     return SearchDocument(
         source=draft.source,
         source_key=draft.source_key,
         doc_type=draft.doc_type,
         url=draft.url,
-        title_en=draft.title_en,
-        title_dv=draft.title_dv,
+        title_en=title_en,
+        title_dv=title_dv,
         title_latin=draft.title_latin,
-        summary_en=draft.summary_en,
-        summary_dv=draft.summary_dv,
+        summary_en=summary_en,
+        summary_dv=summary_dv,
         price=draft.price,
         currency=draft.currency,
         location=draft.location,

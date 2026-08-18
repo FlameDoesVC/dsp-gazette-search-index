@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from enrich.compensation import estimate_net, salary_display
 from enrich.schemas import Occupancy, Spec
+from search.vocab import label
 
 # Bump when a card's field set changes. Triggers a reindex rather than a
 # runtime lookup. Spec 8.
@@ -96,6 +97,8 @@ def _job_card(a, base: dict) -> dict:
         "grade": a.grade,
         "location": base.get("location", ""),
         "position_type": a.position_type,
+        "position_type_label": label("position_type", a.position_type),
+        "job_category_label": label("job_category", a.job_category),
         "required_documents": a.required_documents,
         # raw date only; state is computed at query time
         "deadline": a.deadline,
@@ -122,6 +125,8 @@ def _property_card(a, base: dict) -> dict:
         "bathrooms": a.bathrooms,
         "furnishing": a.furnishing,
         "tenant_preference": a.tenant_preference or a.occupancy.tenant_preference,
+        "listing_kind": a.listing_kind,
+        "listing_kind_label": label("listing_kind", a.listing_kind),
     }
 
 
@@ -135,6 +140,7 @@ def _shopping_card(a, base: dict) -> dict:
         "currency": base.get("currency", "MVR"),
         "negotiable": a.negotiable,
         "condition": a.condition,
+        "condition_label": label("condition", a.condition),
         "brand": a.brand,
         "location": base.get("location", ""),
         "seller_name": base.get("seller_name", ""),

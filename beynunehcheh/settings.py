@@ -256,6 +256,15 @@ ENRICH_MAX_INPUT_CHARS = int(os.getenv("ENRICH_MAX_INPUT_CHARS", "3500"))
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
+# --- background field translation (P5 task 0C) ---
+TRANSLATE_TIMEOUT = float(os.getenv("TRANSLATE_TIMEOUT", "30"))
+TRANSLATE_MIN_CHARS = int(os.getenv("TRANSLATE_MIN_CHARS", "3"))
+
+# --- gettext catalog for closed vocabularies (P5 task 0C step 7) ---
+USE_I18N = True
+LANGUAGES = [("en", "English"), ("dv", "Dhivehi")]
+LOCALE_PATHS = [BASE_DIR / "locale"]
+
 # Maldives Retirement Pension Scheme. Settings, not constants, because tax
 # treatment changes and hardcoding it is how a search engine starts lying.
 # Spec 4.3.2.

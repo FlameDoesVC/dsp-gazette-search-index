@@ -1239,6 +1239,1166 @@ jj commit -m "P5 task 0B: gazette dates, job deadlines, required_documents"
 
 ---
 
+### Task 0C: The bilingual guarantee
+
+**Do this after Task 0B and before Task 1.** The frontend is incoherent without
+it: a Dhivehi query returns English titles for 98.5% of the corpus today.
+
+Two defects, both mine, both in the same idea.
+
+**Defect 1 — fields are populated by source assumption, not by content.** The
+fields are *named* by language but *filled* by whichever adapter wrote them.
+Audited on the live corpus:
+
+| Source | `title_en` script | `title_dv` script | Rows |
+|---|---|---|---|
+| ibay | latin | **empty** | 20,442 |
+| gazette | latin | thaana | 290 |
+| gazette | empty | **latin** | 8 |
+| gazette | latin | latin | 3 |
+| gazette | **thaana** | **latin** | 3 |
+
+Fourteen gazette rows have the languages swapped or Latin text sitting in the
+Dhivehi field. Nothing prevents it, because nothing checks.
+
+**Defect 2 — 20,445 of 20,751 documents have no Dhivehi title at all.**
+`build_query_plan` already resolves Thaana, keyboard-space and dv-Latn queries
+to `response_lang="dv"` — the query side is correct. It asks for a Dhivehi
+title, there isn't one, and the fallback produces the mixed-script page.
+
+**The invariant:** a field named `_en` holds English and a field named `_dv`
+holds Dhivehi, decided by the script of the content and never by the source's
+default language. Both are always populated.
+
+**Files:**
+- Create: `search/lang/assign.py`, `search/management/commands/fill_bilingual.py`
+- Modify: `search/indexing.py`, `beynunehcheh/settings.py`
+- Test: `search/tests/test_lang_assign.py`, `search/tests/test_fill_bilingual.py`
+
+**Interfaces:**
+- Produces: `route_bilingual(*texts) -> tuple[str, str]`, `fill_bilingual` command,
+  settings `TRANSLATE_TIMEOUT`, `TRANSLATE_MIN_CHARS`.
+
+- [ ] **Step 1: Write the failing test for routing**
+
+`search/tests/test_lang_assign.py`:
+
+```python
+import pytest
+
+from search.lang.assign import route_bilingual
+
+
+def test_english_goes_to_en_dhivehi_to_dv():
+    assert route_bilingual("Administrative Officer") == ("Administrative Officer", "")
+    assert route_bilingual("ވަޒީފާގެ ފުރުޞަތު") == ("", "ވަޒީފާގެ ފުރުޞަތު")
+
+
+def test_both_are_kept_when_both_are_given():
+    en, dv = route_bilingual("Officer", "އޮފިސަރ")
+    assert (en, dv) == ("Officer", "އޮފިސަރ")
+
+
+def test_arguments_arriving_in_the_wrong_order_are_corrected():
+    """The concrete bug: three gazette rows have Thaana in title_en and Latin
+    in title_dv. Routing by content makes that unrepresentable."""
+    en, dv = route_bilingual("ވަޒީފާގެ ފުރުޞަތު", "Job Opportunity")
+    assert en == "Job Opportunity"
+    assert dv == "ވަޒީފާގެ ފުރުޞަތު"
+
+
+def test_latin_dhivehi_counts_as_english_side_not_dhivehi():
+    """`kudhin bahattaden` is Dhivehi in language but Latin in script. It
+    renders LTR and belongs on the Latin side; direction follows script."""
+    en, dv = route_bilingual("Vazeefaa ah dhaa firihen kudhin bahattaden")
+    assert en.startswith("Vazeefaa")
+    assert dv == ""
+
+
+def test_a_mixed_string_lands_on_the_dhivehi_side():
+    en, dv = route_bilingual("GS3 ގްރޭޑް")
+    assert dv == "GS3 ގްރޭޑް"
+
+
+def test_empty_and_none_are_safe():
+    assert route_bilingual() == ("", "")
+    assert route_bilingual("", None) == ("", "")
+
+
+def test_the_first_non_empty_of_each_script_wins():
+    en, dv = route_bilingual("First", "Second", "ފުރަތަމަ")
+    assert en == "First" and dv == "ފުރަތަމަ"
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `pytest search/tests/test_lang_assign.py -v`
+Expected: FAIL — `ModuleNotFoundError`.
+
+- [ ] **Step 3: Write it**
+
+`search/lang/assign.py`:
+
+```python
+"""Route text to the correct language field by its script. Spec 10.
+
+A field named `_en` holds English and a field named `_dv` holds Dhivehi. That
+is decided here, from the content, so an adapter cannot get it wrong by
+assuming its source's default language -- which is exactly how three gazette
+rows ended up with Thaana in `title_en`.
+
+Latin-script Dhivehi stays on the English side on purpose: `kudhin bahattaden`
+is Dhivehi in language but Latin in script, it renders left-to-right, and
+`vector_latin` is where it is searched from. Direction follows script.
+"""
+
+from __future__ import annotations
+
+from search.lang.script import is_thaana
+
+
+def route_bilingual(*texts: str | None) -> tuple[str, str]:
+    """Returns (english_side, dhivehi_side). First non-empty of each wins."""
+    en = dv = ""
+    for text in texts:
+        text = (text or "").strip()
+        if not text:
+            continue
+        if is_thaana(text):
+            dv = dv or text
+        else:
+            en = en or text
+    return en, dv
+```
+
+If P2 named the predicate differently, import whatever it exports rather than
+writing a second Thaana detector — one definition of "is this Thaana" in the
+codebase.
+
+- [ ] **Step 4: Enforce it in the indexer**
+
+Routing in `search/indexing.py::_row` rather than per-adapter, so every source
+gets it and no future adapter can reintroduce the bug:
+
+```python
+def _row(draft: DocumentDraft) -> SearchDocument:
+    # Route by content, not by the adapter's assumption about its source.
+    title_en, title_dv = route_bilingual(draft.title_en, draft.title_dv)
+    summary_en, summary_dv = route_bilingual(draft.summary_en, draft.summary_dv)
+    return SearchDocument(
+        # ... every other field stays exactly as it is ...
+        title_en=title_en,
+        title_dv=title_dv,
+        summary_en=summary_en,
+        summary_dv=summary_dv,
+    )
+```
+
+Add to `search/tests/test_indexing.py`:
+
+```python
+@pytest.mark.django_db
+def test_the_indexer_corrects_a_swapped_draft():
+    upsert_drafts([DocumentDraft(
+        source="gazette", source_key="IUL-1", doc_type="news", url="https://x",
+        title_en="ވަޒީފާގެ ފުރުޞަތު", title_dv="Job Opportunity",
+    )])
+    d = SearchDocument.objects.get()
+    assert d.title_en == "Job Opportunity"
+    assert d.title_dv == "ވަޒީފާގެ ފުރުޞަތު"
+```
+
+> **Steps 1-4 have landed.** `route_bilingual`, the indexer routing and their
+> tests are implemented and green; leave them alone. Steps 5 onward were
+> rewritten after measuring the corpus — the original plan translated every
+> field per document, which is the wrong mechanism for most of them.
+
+- [ ] **Step 5: The three kinds of field, and why they need different mechanisms**
+
+`attrs` is not one problem. Measured across the corpus:
+
+| Kind | Examples | Distinct values | Right mechanism |
+|---|---|---|---|
+| language-neutral | `compensation`, `deadline`, `experience_years`, contact values, URLs | n/a | none — never translate |
+| closed vocabulary | `position_type`, `job_category`, `grade`, `announcement_type`, `condition`, `listing_kind` | **20 total** | gettext catalog |
+| entity name | `employer`, `office` | **183 total** | fill existing `translated_name` columns |
+| open prose | `role`, `qualifications`, `allowance.label_raw` | per document | translate, deduped |
+
+`position_type` has **two** distinct values in the entire corpus. Translating
+"Permanent" per document, 51,000 times, through a language model would be
+absurd on cost alone — but the real defect is consistency: `TranslationCache`
+keys on the exact string, so a model that emits "Full-time" once and "Full
+time" once yields two entries and two different Dhivehi spellings of one
+concept. That is the same failure `SpecKey.value_aliases` exists to prevent
+for shopping facets (spec 4.4), and the fix is the same: canonicalise to a key,
+then look up a label.
+
+Translate the **term**, not the **occurrence**.
+
+Also measured, and it is the largest single win available:
+
+```
+Office            170 rows,   0 with translated_name
+IulaanType         13 rows,   0 with translated_name
+Iulaan            306 rows, 295 with translated_title
+```
+
+The adapter already reads these — `office_en = (i.office.translated_name or
+i.office.name)`. The plumbing is correct and the data is empty, so `office_en`
+currently falls back to the **Thaana** name and writes it into the English
+search vector. 183 translations fix `employer` and `announcement_type` for
+every gazette document that exists now and every one of the 51,000 to come.
+
+Transliteration remains the wrong tool for any of this. Measured:
+
+| English source | `translit_latin_to_dv_variants` | GemmaTranslate |
+|---|---|---|
+| Social Media Marketing Packages | `ށޮޗިޢޅ މެދިޢ މޢރކެތިނގ ޕޢޗކޢގެށ` | `ސޯޝަލް މީޑިއާ މާކެޓިން ޕެކޭޖްތައް` |
+| Fast Charging Charger 20W | `ފޢށތ ޗޢރގިނގ ޗޢރގެރ` | `ފޯސްޗާޖް ޗާޖަރ 20W` |
+
+`translit_latin_to_dv_variants` maps *phonetic Latin-Dhivehi* to Thaana for the
+query pipeline. Fed English orthography it produces phonetic nonsense.
+
+Two measured failure modes for the translator, both needing an English
+fallback rather than an empty field: `iPhone 13 Pro Max 256GB` returned `None`
+after **127 seconds** (a title that is entirely brand names has nothing to
+translate), and `Washing machine for sale` came back half-translated.
+
+- [ ] **Step 6: Fill the entity translations**
+
+`search/management/commands/fill_entity_translations.py`:
+
+```python
+"""Populate Office.translated_name and IulaanType.translated_name.
+
+183 rows, once. Every gazette document references an office and a type, so
+this makes `employer` and `announcement_type` bilingual for the whole corpus
+-- now and at 51,000 iulaan -- without a single per-document translation.
+
+The columns already exist and the gazette adapter already reads them; they
+have simply never been populated, so `office_en` has been falling back to the
+Thaana name and polluting the English search vector.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from django.core.management.base import BaseCommand
+
+from gazette.models import IulaanType, Office
+
+logger = logging.getLogger(__name__)
+
+
+class Command(BaseCommand):
+    help = "Translate office and iulaan-type names once (183 rows)."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--force", action="store_true",
+                            help="Retranslate rows that already have a value.")
+
+    def handle(self, *args, **opts):
+        from core.translate import translate_dv_to_en_sync
+
+        for model, label in ((Office, "office"), (IulaanType, "iulaan type")):
+            qs = model.objects.all()
+            if not opts["force"]:
+                qs = qs.filter(translated_name="")
+            self.stdout.write(f"{qs.count()} {label} rows to translate")
+            if opts["dry_run"]:
+                continue
+
+            done = 0
+            for row in qs.iterator(chunk_size=100):
+                try:
+                    out = translate_dv_to_en_sync(row.name[:256])
+                except Exception:
+                    logger.warning("translation failed for %s %s", label, row.pk,
+                                   exc_info=True)
+                    continue
+                if out and out.strip():
+                    row.translated_name = out.strip()[:255]
+                    row.save(update_fields=["translated_name"])
+                    done += 1
+            self.stdout.write(self.style.SUCCESS(f"  {done} {label} rows filled"))
+
+        self.stdout.write("Run `reindex --source gazette` to publish.")
+```
+
+Test in `search/tests/test_fill_entity_translations.py`:
+
+```python
+import pytest
+from django.core.management import call_command
+from io import StringIO
+
+from gazette.models import IulaanType, Office
+
+
+@pytest.fixture(autouse=True)
+def stub(monkeypatch):
+    monkeypatch.setattr("core.translate.translate_dv_to_en_sync",
+                        lambda t: "EN " + t[:20])
+
+
+@pytest.mark.django_db
+def test_offices_and_types_are_filled():
+    Office.objects.create(name="ތިލަދުންމަތީ އުތުރުބުރީ ފިއްލަދޫ ކައުންސިލްގެ އިދާރާ")
+    IulaanType.objects.create(name="ވަޒީފާގެ ފުރުޞަތު")
+    call_command("fill_entity_translations", stdout=StringIO())
+    assert Office.objects.get().translated_name.startswith("EN ")
+    assert IulaanType.objects.get().translated_name.startswith("EN ")
+
+
+@pytest.mark.django_db
+def test_an_existing_translation_is_not_overwritten():
+    Office.objects.create(name="ފިއްލަދޫ", translated_name="Fillhadhoo Council")
+    call_command("fill_entity_translations", stdout=StringIO())
+    assert Office.objects.get().translated_name == "Fillhadhoo Council"
+
+
+@pytest.mark.django_db
+def test_one_office_translation_serves_every_document_referencing_it():
+    """The leverage: 170 translations cover `employer` for all 51,000 iulaan."""
+    from gazette.models import Iulaan
+    office = Office.objects.create(name="ފިއްލަދޫ ކައުންސިލް")
+    for i in range(3):
+        Iulaan.objects.create(id=f"IUL-{i}", title="t", office=office,
+                              additional_info={}, attachments=[], body="b")
+    call_command("fill_entity_translations", stdout=StringIO())
+    office.refresh_from_db()
+    assert all(i.office.translated_name for i in Iulaan.objects.all())
+```
+
+- [ ] **Step 7: A gettext catalog for the closed vocabularies**
+
+Django's i18n framework, used the way it is meant to be used. These are build
+artifacts in version control, reviewed by a human, with zero runtime cost —
+not database rows an admin edits, because the vocabulary is fixed while
+`Office` grows.
+
+`search/vocab.py`:
+
+```python
+"""Canonical keys and translatable labels for closed attribute vocabularies.
+
+Twenty strings across the whole corpus. They are translated once in a gettext
+catalog rather than per document, for two reasons: cost is the obvious one,
+and consistency is the real one -- a per-document translator emitting
+"Full-time" and "Full time" produces two Dhivehi spellings of one concept.
+
+Canonicalise first, then look up. Same principle as SpecKey.value_aliases
+(spec 4.4).
+"""
+
+from __future__ import annotations
+
+import re
+
+from django.utils.translation import gettext_lazy as _
+
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def canonical(value: str) -> str:
+    """'Full-time', 'Full time', 'FULL TIME' -> 'full_time'."""
+    return _NON_ALNUM.sub("_", (value or "").strip().lower()).strip("_")
+
+
+# key -> translatable label. Add a row when enrichment produces a new value;
+# the admin promotion queue in P7 is the model for spotting them.
+POSITION_TYPE = {
+    "permanent": _("Permanent"),
+    "full_time": _("Full-time"),
+    "part_time": _("Part-time"),
+    "contract": _("Contract"),
+    "temporary": _("Temporary"),
+}
+
+JOB_CATEGORY = {
+    "medical": _("Medical"),
+    "logistics": _("Logistics"),
+    "teaching": _("Teaching"),
+    "administration": _("Administration"),
+    "engineering": _("Engineering"),
+}
+
+CONDITION = {
+    "new": _("New"),
+    "used": _("Used"),
+    "refurbished": _("Refurbished"),
+}
+
+LISTING_KIND = {
+    "rent": _("For rent"),
+    "sale": _("For sale"),
+    "wanted": _("Wanted"),
+}
+
+VOCABULARIES = {
+    "position_type": POSITION_TYPE,
+    "job_category": JOB_CATEGORY,
+    "condition": CONDITION,
+    "listing_kind": LISTING_KIND,
+}
+
+
+def label(field: str, value: str) -> str:
+    """Localised label, or the raw value when the vocabulary has no entry.
+
+    Falling back to the raw value keeps an unrecognised term visible rather
+    than blanking the card -- an unknown value is a prompt to extend the
+    catalog, not an error.
+    """
+    table = VOCABULARIES.get(field)
+    if not table:
+        return value
+    return str(table.get(canonical(value), value))
+```
+
+`announcement_type` is deliberately absent: its values are the gazette's own
+`IulaanType` names, already handled by step 6.
+
+Wire it into `enrich/cards.py` so the card carries both the key and the
+resolved label, and add to settings:
+
+```python
+USE_I18N = True
+LANGUAGES = [("en", "English"), ("dv", "Dhivehi")]
+LOCALE_PATHS = [BASE_DIR / "locale"]
+```
+
+Then:
+
+```bash
+python manage.py makemessages -l dv
+# translate the ~20 msgstr entries in locale/dv/LC_MESSAGES/django.po by hand
+python manage.py compilemessages
+```
+
+Tests in `search/tests/test_vocab.py`:
+
+```python
+import pytest
+from django.utils import translation
+
+from search.vocab import canonical, label
+
+
+@pytest.mark.parametrize("raw,key", [
+    ("Full-time", "full_time"), ("Full time", "full_time"),
+    ("FULL TIME", "full_time"), ("  Permanent  ", "permanent"),
+])
+def test_spelling_variants_canonicalise_to_one_key(raw, key):
+    """The consistency failure this exists to prevent: a per-document
+    translator would give each variant its own Dhivehi spelling."""
+    assert canonical(raw) == key
+
+
+def test_label_resolves_in_english():
+    with translation.override("en"):
+        assert label("position_type", "Full time") == "Full-time"
+
+
+def test_label_resolves_in_dhivehi():
+    with translation.override("dv"):
+        out = label("position_type", "Permanent")
+        assert out and out != "Permanent", "dv catalog entry missing"
+
+
+def test_an_unknown_value_falls_back_to_itself_not_to_blank():
+    assert label("position_type", "Seasonal") == "Seasonal"
+
+
+def test_an_unknown_field_is_passed_through():
+    assert label("nonexistent_field", "x") == "x"
+```
+
+- [ ] **Step 8: Narrow `fill_bilingual` to open prose only**
+
+The command already written in steps 1-4 translates every title and summary.
+Keep it, but exclude what steps 6 and 7 now handle, and extend it to the two
+`attrs` fields that are genuinely per-document:
+
+```python
+# Fields translated per document. Everything else is a closed vocabulary
+# (search/vocab.py) or an entity name (fill_entity_translations) and must not
+# be translated here -- doing so reintroduces the spelling-drift problem.
+PROSE_ATTRS = ("role", "qualifications")
+```
+
+Order matters: run `fill_entity_translations` and `compilemessages` **before**
+`fill_bilingual`, so the entity and vocabulary layers are in place and
+`fill_bilingual` only sees what is actually left.
+
+Add a test asserting the boundary:
+
+```python
+@pytest.mark.django_db
+def test_closed_vocabulary_fields_are_never_sent_to_the_translator(stub_translate):
+    """position_type has two distinct values in the whole corpus. Translating
+    it per document is both wasteful and inconsistent."""
+    SearchDocument.objects.create(
+        source="ibay", source_key="1", doc_type="job", url="https://x",
+        title_en="Officer", attrs={"position_type": "Permanent",
+                                   "job_category": "Medical"},
+    )
+    call_command("fill_bilingual", stdout=StringIO())
+    assert "Permanent" not in stub_translate
+    assert "Medical" not in stub_translate
+```
+
+- [ ] **Step 9: Run, in this order**
+
+`OLLAMA_URL` must point at the GPU host running `gemmatranslate:12b`.
+
+```bash
+python manage.py fill_entity_translations --dry-run      # expect 170 + 13
+python manage.py fill_entity_translations                # minutes, free
+python manage.py compilemessages
+python manage.py reindex --source gazette                # picks up office_en
+
+python manage.py fill_bilingual --dry-run                # expect ~20,445
+python manage.py fill_bilingual --source ibay --limit 200
+#   read twenty by hand before continuing -- a stalled translation returns the
+#   English string, which looks correct in the database and only shows up as
+#   an untranslated card
+python manage.py fill_bilingual
+```
+
+- [ ] **Step 10: Verify the invariant**
+
+```sql
+-- every document has both sides
+SELECT count(*) FROM search_searchdocument
+WHERE (title_en = '' AND title_dv = '') OR (title_dv = '' AND title_en <> '');
+
+-- no Thaana left in an English field
+SELECT count(*) FROM search_searchdocument WHERE title_en ~ '[ހ-޿]';
+
+-- entity translations complete
+SELECT count(*) FROM gazette_office WHERE translated_name = '';
+```
+
+All three must return 0.
+
+- [ ] **Step 11: Commit**
+
+```bash
+jj commit -m "P5 task 0C: entity translations, vocabulary catalog, bilingual backfill"
+```
+
+---
+
+### Task 0D: Replace the transcription rung
+
+**Do this after Task 0C.** It supersedes rung 3 of the extraction ladder in
+spec 5.6. Nothing has been transcribed yet, so there is no sunk cost and no
+migration.
+
+**Why.** The shipped rung sends scanned PDFs to Claude Haiku 4.5 as native
+PDFs. Measured on genuinely scanned pages, that path **fabricates**: on a
+pristine 300 DPI ADh. Mandhoo futsal notice, Haiku returned 18,550 characters
+of looping boilerplate and Opus 4.5 returned a fluent notice about Addu City
+Gender Ministry building repairs. Anchor overlap with the document's own known
+title and office: **0%**. The full evaluation, including why five other
+backends were rejected, is in
+`docs/superpowers/measurements/2026-08-18-p3-attachments.md`.
+
+**The replacement**, measured on the same pages:
+
+| Pipeline | anchor | fili | Speed | Cost/page | Verifiable |
+|---|---|---|---|---|---|
+| Claude native (shipped) | 0% | 0.97 | ~10s | $0.0173 | no |
+| **Vision -> T5 -> skeleton gate** | **87%** | 0.90 | **0.8s** | **$0.0015** | **yes** |
+
+~$61 for the full 40,500-page backlog instead of $700, on CPU, leaving the GPU
+to translation.
+
+**The invariant this buys.** A repaired word is accepted only when its
+consonant skeleton is unchanged from the OCR. The model re-vowels; it cannot
+substitute. That is the same guarantee as spec 5.2 layer 0 — select, never
+invent — applied one script down, and it is why this rung can be trusted where
+the LLM rung could not.
+
+**Files:**
+- Create: `search/extract/ocr.py`, `search/extract/repair.py`
+- Modify: `search/extract/transcribe.py`, `search/management/commands/extract_attachments.py`, `beynunehcheh/settings.py`, `requirements.txt`
+- Test: `search/tests/test_extract_ocr.py`, `search/tests/test_extract_repair.py`
+
+**Interfaces:**
+- Produces: `vision_ocr(png, *, hints=("dv",)) -> str`, `rasterize(pdf, dpi, first, last) -> list[bytes]`,
+  `repair_text(text) -> str`, `skeleton_gate(src, repaired) -> tuple[str, float]`,
+  `anchor_overlap(text, *, title, office) -> float`, `transcribe_pdf(pdf, *, title, office) -> ExtractionResult`.
+
+- [ ] **Step 1: Dependencies and settings**
+
+```
+torch==2.13.0            # CPU wheel: --index-url https://download.pytorch.org/whl/cpu
+transformers==5.15.0
+sentencepiece
+```
+
+`httpx` already present; Vision is called over REST with an API key, so no
+`google-cloud-vision` SDK is needed.
+
+```python
+# --- OCR for scanned attachments (spec 5.6, superseded rung 3) ---
+GOOGLE_VISION_API_KEY = os.getenv("GOOGLE_VISION_API_KEY", "")
+OCR_DPI = int(os.getenv("OCR_DPI", "300"))
+OCR_REPAIR_MODEL = os.getenv(
+    "OCR_REPAIR_MODEL", "alakxender/t5-dhivehi-typo-corrector-asr"
+)
+# Below this the transcription is not describing the document it is attached
+# to. Measured: 0% for a fabrication, 87% for a good page.
+OCR_ANCHOR_MIN = float(os.getenv("OCR_ANCHOR_MIN", "0.30"))
+```
+
+Vision requires a billing account on the GCP project even for the free
+1,000 pages/month tier; a project without one returns 403 on every request.
+
+- [ ] **Step 1b: Cache every paid call before writing any of them**
+
+Non-negotiable, and it goes in first so no later step can forget it. Paying
+twice for a byte-identical request is pure waste, and extraction gets re-run
+constantly -- during development, after a prompt change, after a crash
+mid-backfill, and every time `--stale` re-queues a slice.
+
+`diskcache` is already a dependency.
+
+```python
+# search/extract/cache.py
+"""Content-addressed cache for billed API calls. Spec 5.6.
+
+Keyed on (provider, model, prompt, sha256 of the exact input bytes), so an
+identical request is never paid for twice. The cache is the reason a failed
+backfill can be restarted for free: rerunning 40,500 pages after a crash would
+otherwise cost the whole $61 again.
+
+Never keyed on the attachment id -- the same page re-fetched must hit, and a
+different page under the same id must miss.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+import diskcache
+from django.conf import settings
+
+_cache = None
+
+
+def cache():
+    global _cache
+    if _cache is None:
+        _cache = diskcache.Cache(
+            str(Path(settings.OCR_CACHE_DIR)),
+            size_limit=settings.OCR_CACHE_SIZE_BYTES,
+        )
+    return _cache
+
+
+def cached_call(provider: str, model: str, payload: bytes, prompt: str, fn):
+    """Return (result, was_cached). `fn` is only invoked on a miss."""
+    if not settings.OCR_CACHE_ENABLED:
+        return fn(), False
+    key = hashlib.sha256(b"|".join([
+        provider.encode(), model.encode(), prompt.encode(),
+        hashlib.sha256(payload).digest(),
+    ])).hexdigest()
+    hit = cache().get(key)
+    if hit is not None:
+        return hit, True
+    out = fn()
+    cache().set(key, out)
+    return out, False
+```
+
+Settings:
+
+```python
+OCR_CACHE_ENABLED = os.getenv("OCR_CACHE_ENABLED", "1") == "1"
+OCR_CACHE_DIR = os.getenv("OCR_CACHE_DIR", str(BASE_DIR / ".cache" / "ocr"))
+OCR_CACHE_SIZE_BYTES = int(os.getenv("OCR_CACHE_SIZE_BYTES", str(8 * 1024**3)))
+```
+
+Mount `OCR_CACHE_DIR` as a named volume in both compose files, or a container
+rebuild throws the cache away and the next run re-bills everything.
+
+`vision_ocr` wraps its HTTP call in `cached_call`. Errors are **not** cached --
+a 403 from a billing lapse must not become a permanent empty result.
+
+Test in `search/tests/test_extract_ocr.py`:
+
+```python
+def test_an_identical_call_is_never_paid_for_twice(settings, tmp_path):
+    settings.OCR_CACHE_DIR = str(tmp_path)
+    calls = []
+
+    def _fn():
+        calls.append(1)
+        return {"text": "x"}
+
+    from search.extract.cache import cached_call
+    a, hit_a = cached_call("vision", "m", b"page-bytes", "p", _fn)
+    b, hit_b = cached_call("vision", "m", b"page-bytes", "p", _fn)
+    assert (a, b) == ({"text": "x"}, {"text": "x"})
+    assert (hit_a, hit_b) == (False, True)
+    assert len(calls) == 1
+
+
+def test_different_bytes_miss(settings, tmp_path):
+    settings.OCR_CACHE_DIR = str(tmp_path)
+    from search.extract.cache import cached_call
+    cached_call("vision", "m", b"page-a", "p", lambda: 1)
+    _, hit = cached_call("vision", "m", b"page-b", "p", lambda: 2)
+    assert hit is False
+
+
+def test_a_changed_prompt_misses(settings, tmp_path):
+    """A prompt edit changes the output, so it must not serve a stale hit."""
+    settings.OCR_CACHE_DIR = str(tmp_path)
+    from search.extract.cache import cached_call
+    cached_call("vision", "m", b"page", "prompt-v1", lambda: 1)
+    _, hit = cached_call("vision", "m", b"page", "prompt-v2", lambda: 2)
+    assert hit is False
+
+
+def test_errors_are_not_cached(settings, tmp_path):
+    """A 403 from a lapsed billing account must not become permanent."""
+    settings.OCR_CACHE_DIR = str(tmp_path)
+    from search.extract import ocr
+    # vision_ocr raises on error rather than returning; assert the raise path
+    # leaves the cache empty.
+    ...
+```
+
+- [ ] **Step 2: Write the failing test for OCR**
+
+`search/tests/test_extract_ocr.py`:
+
+```python
+import pytest
+
+from search.extract.ocr import anchor_overlap, rasterize
+
+
+def test_rasterize_returns_one_png_per_page(tiny_pdf_2_pages):
+    pages = rasterize(tiny_pdf_2_pages, dpi=150, first=1, last=2)
+    assert len(pages) == 2
+    assert all(p.startswith(b"\x89PNG") for p in pages)
+
+
+def test_rasterizing_is_what_makes_the_test_honest(tiny_pdf_2_pages):
+    """Vision must see pixels. Handing it a PDF with a text layer would let it
+    read the embedded text and score perfectly while measuring nothing."""
+    assert rasterize(tiny_pdf_2_pages, dpi=150, first=1, last=1)[0][:4] == b"\x89PNG"
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("އަރިއަތޮޅު ދެކުނުބުރީ މަންދޫ ކައުންސިލްގެ އިދާރާ", 1.0),
+        ("ދެކުނުބުރީ ކައުންސިލްގެ", 0.5),
+        ("މިނިސްޓްރީ އޮފް ހެލްތް ޢިމާރާތުގެ މަރާމާތު", 0.0),
+    ],
+)
+def test_anchor_overlap_scores_against_known_metadata(text, expected):
+    """Title and office come from the gazette HTML and are never OCR'd, so
+    this needs no reference text. It is the only metric that caught the
+    fabrication: 0% for an invented page, 87% for a good one."""
+    got = anchor_overlap(
+        text,
+        title="މަންދޫ ފުޓްސަލް",
+        office="އަރިއަތޮޅު ދެކުނުބުރީ މަންދޫ ކައުންސިލްގެ އިދާރާ",
+    )
+    assert got == pytest.approx(expected, abs=0.35)
+
+
+def test_anchor_overlap_with_no_metadata_does_not_divide_by_zero():
+    assert anchor_overlap("anything", title="", office="") == 0.0
+
+
+def test_short_tokens_are_ignored():
+    """Two- and three-character tokens match almost anything."""
+    assert anchor_overlap("ހއ", title="ހއ", office="") == 0.0
+```
+
+Add a `tiny_pdf_2_pages` fixture building a 2-page PDF with `pdftoppm`-readable
+content, or skip with `pytest.importorskip` where poppler is absent.
+
+- [ ] **Step 3: Write `ocr.py`**
+
+`search/extract/ocr.py`:
+
+```python
+"""Google Cloud Vision OCR over rasterized pages. Spec 5.6.
+
+Vision alone is not good enough -- it drops ~25% of fili and scored CER 0.378
+against a 0.15 gate. Its value is that it is *faithful about consonants*: 80%
+anchor overlap on a scanned page where an LLM given the same page scored 0%.
+That faithful skeleton is what the repair step in `repair.py` re-vowels, and
+what the gate verifies against.
+
+Pages are rasterized locally rather than sent as PDFs. Vision would read an
+embedded text layer if one existed, which is correct for production but would
+have made the evaluation meaningless; keeping one code path avoids a
+measured-versus-shipped divergence.
+"""
+
+from __future__ import annotations
+
+import base64
+import logging
+import re
+import subprocess
+import tempfile
+from pathlib import Path
+
+import httpx
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+ENDPOINT = "https://vision.googleapis.com/v1/images:annotate"
+_TOKEN = re.compile(r"[\wހ-޿]{4,}", re.UNICODE)
+
+
+def rasterize(pdf: bytes, *, dpi: int | None = None, first: int = 1,
+              last: int | None = None) -> list[bytes]:
+    dpi = dpi or settings.OCR_DPI
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "in.pdf"
+        src.write_bytes(pdf)
+        cmd = ["pdftoppm", "-png", "-r", str(dpi), "-f", str(first)]
+        if last:
+            cmd += ["-l", str(last)]
+        cmd += [str(src), str(Path(tmp) / "page")]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+        return [p.read_bytes() for p in sorted(Path(tmp).glob("page*.png"))]
+
+
+def vision_ocr(png: bytes, *, hints=("dv",), client: httpx.Client | None = None) -> str:
+    body = {"requests": [{
+        "image": {"content": base64.b64encode(png).decode()},
+        "features": [{"type": "DOCUMENT_TEXT_DETECTION"}],
+        "imageContext": {"languageHints": list(hints)},
+    }]}
+    http = client or httpx.Client(timeout=180)
+    try:
+        r = http.post(f"{ENDPOINT}?key={settings.GOOGLE_VISION_API_KEY}", json=body)
+        r.raise_for_status()
+        payload = r.json()["responses"][0]
+    finally:
+        if client is None:
+            http.close()
+    if "error" in payload:
+        raise RuntimeError(payload["error"].get("message", "")[:300])
+    return payload.get("fullTextAnnotation", {}).get("text", "")
+
+
+def anchor_overlap(text: str, *, title: str, office: str) -> float:
+    """Fraction of the document's own known vocabulary present in `text`.
+
+    Title and office come from the gazette HTML and are never OCR'd, so this
+    is a grounding check that needs no reference transcription. Measured: 0%
+    for a fabricated page, 83-93% for a faithful one.
+    """
+    known = set(_TOKEN.findall(title or "")) | set(_TOKEN.findall(office or ""))
+    if not known:
+        return 0.0
+    return len(known & set(_TOKEN.findall(text or ""))) / len(known)
+```
+
+- [ ] **Step 4: Write the failing test for repair and the gate**
+
+`search/tests/test_extract_repair.py`:
+
+```python
+import pytest
+
+from search.extract.repair import skeleton_gate
+
+
+def test_a_re_voweled_word_is_accepted():
+    """Same consonants, added fili -- exactly what the repairer is for."""
+    out, kept = skeleton_gate("ކއުންސިލްގެ", "ކައުންސިލްގެ")
+    assert out == "ކައުންސިލްގެ"
+    assert kept == 1.0
+
+
+def test_a_substituted_word_is_rejected_back_to_the_ocr():
+    """The measured failure: `އދ` became `އާދަމުގެފާނމަންދޫ`. Different
+    skeleton, so the OCR's own word is kept."""
+    out, kept = skeleton_gate("އދ", "އާދަމުގެފާނމަންދޫ")
+    assert out == "އދ"
+    assert kept == 0.0
+
+
+def test_an_inserted_word_does_not_invalidate_the_page():
+    """Alignment is by difflib on the skeleton sequence. A strict positional
+    zip fails on a single off-by-one and discards a whole good page."""
+    src = "ކއުންސިލްގެ އދާރާ"
+    rep = "ކައުންސިލްގެ އައު އިދާރާ"
+    out, kept = skeleton_gate(src, rep)
+    assert "ކައުންސިލްގެ" in out
+    assert "އިދާރާ" in out
+    assert "އައު" not in out          # inserted, never in the OCR
+
+
+def test_latin_and_digits_pass_through_untouched():
+    src = "ނަންބަރު:351/351/2026/41(IUL)"
+    out, _ = skeleton_gate(src, src)
+    assert "351/351/2026/41(IUL)" in out
+
+
+def test_empty_input_is_safe():
+    assert skeleton_gate("", "") == ("", 1.0)
+
+
+def test_the_gate_never_introduces_a_word_absent_from_the_ocr():
+    """The property the whole rung rests on. Every Thaana word in the output
+    must be a re-voweling of a Thaana word in the OCR."""
+    import re
+    from search.lang.normalize import strip_fili
+    src = "ޅޮސްމަޑުލު ދެކުނުބުރި ހތދ ކއުންސިލްގެ"
+    rep = "މާޅޮސްމަޑުލު ދެކުނުބުރީ ހިތާދޫ ކައުންސިލްގެ"
+    out, _ = skeleton_gate(src, rep)
+    W = re.compile(r"[ހ-޿]+")
+    src_skeletons = {strip_fili(w) for w in W.findall(src)}
+    assert all(strip_fili(w) in src_skeletons for w in W.findall(out))
+```
+
+- [ ] **Step 5: Write `repair.py`**
+
+`search/extract/repair.py`:
+
+```python
+"""Fili restoration over faithful OCR, with a verifiable gate. Spec 5.6.
+
+Vision reads the consonants but drops ~25% of the fili. A 60M `t5-small`
+fine-tuned on Dhivehi ASR error correction restores them to 0.98 (corpus
+baseline 0.99) in 0.8s per page on CPU -- no GPU, so translation keeps its
+slots.
+
+The gate is the point. A repaired word is accepted only where its consonant
+skeleton is unchanged, so the model can re-vowel but cannot substitute. That
+turns "the model probably did not invent this" into "the model provably could
+not have", which is the difference between this rung and the LLM rung it
+replaces.
+"""
+
+from __future__ import annotations
+
+import difflib
+import functools
+import logging
+import re
+
+from django.conf import settings
+
+from search.lang.normalize import strip_fili
+
+logger = logging.getLogger(__name__)
+
+_WORD = re.compile(r"([ހ-޿]+)")
+MAX_INPUT_TOKENS = 256
+
+
+@functools.lru_cache(maxsize=1)
+def _model():
+    """Loaded once per process. ~240 MB, CPU."""
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
+    name = settings.OCR_REPAIR_MODEL
+    return AutoTokenizer.from_pretrained(name), \
+        AutoModelForSeq2SeqLM.from_pretrained(name).eval()
+
+
+def repair_text(text: str, *, batch_size: int = 16) -> str:
+    """Re-vowel line by line. Ungated -- callers must pass the result through
+    `skeleton_gate` before trusting it."""
+    if not text.strip():
+        return text
+    import torch
+
+    tok, model = _model()
+    lines = text.splitlines()
+    out: list[str] = []
+    with torch.no_grad():
+        for i in range(0, len(lines), batch_size):
+            chunk = ["fix: " + line for line in lines[i:i + batch_size]]
+            enc = tok(chunk, return_tensors="pt", padding=True,
+                      truncation=True, max_length=MAX_INPUT_TOKENS)
+            gen = model.generate(**enc, max_length=MAX_INPUT_TOKENS, num_beams=1)
+            out += tok.batch_decode(gen, skip_special_tokens=True)
+    return "\n".join(out)
+
+
+def skeleton_gate(source: str, repaired: str) -> tuple[str, float]:
+    """Keep repaired words whose consonant skeleton matches the OCR.
+
+    Returns (gated_text, accepted_fraction). Alignment is difflib over the
+    skeleton sequence rather than a positional zip: a single inserted or
+    dropped word would otherwise shift everything and discard a good page.
+
+    Non-Thaana runs -- Latin, digits, reference numbers -- come from `source`
+    untouched, so nothing outside the Thaana runs can drift.
+    """
+    src_words = _WORD.findall(source)
+    if not src_words:
+        return source, 1.0
+    rep_words = _WORD.findall(repaired)
+
+    src_sk = [strip_fili(w) for w in src_words]
+    rep_sk = [strip_fili(w) for w in rep_words]
+
+    out = list(src_words)
+    kept = 0
+    matcher = difflib.SequenceMatcher(a=src_sk, b=rep_sk, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            out[i1:i2] = rep_words[j1:j2]
+            kept += i2 - i1
+
+    it = iter(out)
+    return _WORD.sub(lambda _m: next(it), source), kept / len(src_words)
+```
+
+- [ ] **Step 6: Rewrite the transcription entry point**
+
+Replace the Claude path in `search/extract/transcribe.py` with a single
+synchronous function. The Batch API, `chunk_ranges` and `TranscriptionItem`
+all go: there is no batching to do when a page costs $0.0015 and 0.8 seconds.
+
+```python
+def transcribe_pdf(pdf: bytes, *, title: str = "", office: str = "",
+                   page_count: int | None = None) -> ExtractionResult:
+    """Rung 3: Vision OCR, fili repair, skeleton gate, anchor check."""
+    from search.extract import ocr, repair
+
+    try:
+        pages = ocr.rasterize(pdf, first=1, last=page_count)
+    except Exception as exc:
+        return ExtractionResult(method="transcribed", status="failed",
+                                error=f"rasterize: {exc}"[:500])
+
+    raw_pages, gated_pages, accepted = [], [], []
+    for png in pages:
+        try:
+            raw = ocr.vision_ocr(png)
+        except Exception as exc:
+            return ExtractionResult(method="transcribed", status="failed",
+                                    error=f"vision: {exc}"[:500])
+        raw_pages.append(raw)
+        fixed = repair.repair_text(raw)
+        gated, kept = repair.skeleton_gate(raw, fixed)
+        gated_pages.append(gated)
+        accepted.append(kept)
+
+    text = _clean("\n".join(gated_pages))
+    if not text:
+        return ExtractionResult(method="transcribed", status="failed",
+                                error="empty transcription")
+
+    # Grounding: does this describe the document it is attached to? Measured
+    # 0% for a fabricated page against 87% for a good one. Cheap insurance
+    # against an upstream model change silently regressing into invention.
+    score = ocr.anchor_overlap(text, title=title, office=office)
+    if title or office:
+        if score < settings.OCR_ANCHOR_MIN:
+            return ExtractionResult(
+                method="transcribed", status="failed",
+                error=f"anchor overlap {score:.2f} below "
+                      f"{settings.OCR_ANCHOR_MIN}; transcription does not "
+                      f"match the iulaan metadata",
+            )
+
+    mean_kept = sum(accepted) / len(accepted) if accepted else 0.0
+    logger.info("transcribed %d pages, anchor %.2f, gate accepted %.0f%%",
+                len(pages), score, 100 * mean_kept)
+    return ExtractionResult(text=text[:TEXT_CAP], method="transcribed",
+                            status="ok", transcribed=True)
+```
+
+- [ ] **Step 7: Update the command**
+
+In `extract_attachments.py`, the queue-and-flush machinery for the Batch API
+disappears. Where an attachment currently goes onto `to_transcribe`, call
+`transcribe_pdf` directly and `_store` the result:
+
+```python
+                result = transcribe.transcribe_pdf(
+                    content,
+                    title=attachment.iulaan.title,
+                    office=(attachment.iulaan.office.name
+                            if attachment.iulaan.office else ""),
+                    page_count=result.page_count,
+                )
+```
+
+Defect B from Task 0 — the flush sitting below the `continue` — stops existing
+along with the batch queue. Keep `--no-transcribe` exactly as Task 0 left it.
+
+- [ ] **Step 8: Update the ladder docstring**
+
+The module header in `extract_attachments.py` still describes the old rung 3:
+
+```python
+"""Run the extraction ladder over gazette attachments. Spec 5.6.
+
+Ladder, cheapest first:
+  1. .docx via python-docx      -- free, no OCR
+  2. PDF with a text layer      -- free, pdftotext
+  3. scanned PDF                -- Google Vision OCR, then fili repair by a
+                                   60M T5 on CPU, then a consonant-skeleton
+                                   gate and an anchor check against the
+                                   iulaan's own title and office
+  4. give up, record ocr_failed
+
+Rung 3 replaced a Claude-native-PDF rung that fabricated on real scans (0%
+anchor overlap). See docs/superpowers/measurements/2026-08-18-p3-attachments.md.
+"""
+```
+
+- [ ] **Step 9: Run the suite**
+
+Run: `pytest search/tests/ -v`
+Expected: PASS. The Task 0 tests that monkeypatch `transcribe.transcribe_batch`
+now need to patch `transcribe.transcribe_pdf` instead — update them rather than
+keeping a dead function alive.
+
+- [ ] **Step 10: Backfill on a sample, then measure before the full run**
+
+```bash
+python manage.py extract_attachments --type job --limit 20
+```
+
+Then read ten transcriptions against their source PDFs by hand. The automated
+checks catch fabrication and substitution; they do not catch a page that is
+merely poor. Record in the measurements file: mean anchor overlap, mean gate
+acceptance, how many hit `ocr_failed` on the anchor threshold, and whether
+`OCR_ANCHOR_MIN = 0.30` is rejecting anything it should not.
+
+Only then:
+
+```bash
+python manage.py extract_attachments --type job
+python manage.py extract_attachments
+```
+
+- [ ] **Step 11: Commit**
+
+```bash
+jj commit -m "P5 task 0D: replace the transcription rung with Vision + gated T5 repair"
+```
+
+---
+
 ### Task 1: django-ninja mount and `/api/v1/meta`
 
 **Files:**
