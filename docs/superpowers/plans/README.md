@@ -14,6 +14,8 @@ Spec: `docs/superpowers/specs/2026-08-17-search-engine-design.md`
 | `2026-08-18-search-p6-frontend.md` | P6 Frontend | written |
 | `2026-08-18-search-p7-facets.md` | P7 Dynamic facets | written |
 | `2026-08-18-search-p8-hardening.md` | P8 Hardening | written |
+| `2026-08-18-search-p9-remediation.md` | P9 Remediation | **written, pending** |
+| `2026-08-18-search-p10-understanding.md` | P10 Query understanding | **written, pending** |
 
 ## The measurements each phase produces
 
@@ -50,8 +52,18 @@ picked up explicitly, in order, from `2026-08-18-search-p5-api.md`.
 | **P5 Task 0C** | **pending** | language fields filled by source assumption; 20,445 documents with no Dhivehi title |
 | **P5 Task 0D** | **pending** | the transcription rung fabricates on real scans (0% anchor overlap) |
 
+| **P10 (all tasks)** | **pending** | `iphone` vs `iphone case` needs entity/modifier parsing; categories must work for sources without them |
+| **P9 (all tasks)** | **pending** | defects found running the system on real data: 40% duplicate rows, `iphone` returns no phones, translation 7.7x slower than needed, spec 5.5 never implemented |
+
 0D supersedes rung 3 of spec 5.6. Do 0C first — the frontend is incoherent
 without it, and 0D touches a slice of the corpus nobody is reading yet.
+
+**P9 is where the observed defects live.** It was written after running the
+system against the real corpus rather than after reading the spec, so its
+evidence section carries measured numbers rather than projections. Within P9,
+tasks 1-3 are one chain (batching, then query-side translation, then moving
+translation out of sync — task 3 must not precede task 2); tasks 4-7 are
+independent.
 
 ## Cross-plan contract
 
@@ -158,6 +170,12 @@ Spec 3.1, 5.7, 8, 12.1, 12.2, 12.4:
   it wrong. Filling the missing side is translation, never the query-side
   transliterator — see P5 Task 0C for the measured comparison.
 - Streaming uses `.iterator(chunk_size=500)` on the `direct` alias.
+- **Extra detail expands inline.** A result with more detail than fits at a
+  glance uses an inline disclosure — never a modal, popover, tooltip or overlay.
+  Results are mixed-script with direction set per element, and an overlay both
+  re-solves problems the page has solved and hides the neighbouring results a
+  list exists to let you compare. Guarded by a test in `a11y.test.tsx`. See P9
+  task 9.
 - Nothing time-dependent goes in `card`. Raw dates only; `deadline_state`,
   freshness and relative time are computed per request.
 - Gazette is write-once. `prompt_version` bumps never backfill it.
@@ -177,6 +195,7 @@ The full operational surface, assembled in P8 as `docs/RUNBOOK.md`:
 | `create_log_partitions --months 3` | monthly | rows land in DEFAULT; retention cannot drop them cheaply |
 | `prune_logs --days 90` | monthly | query text retained past its window (16.3) |
 | `rebuild_suggest_terms` | after each full reindex | autocomplete goes stale |
+| `dedupe_listings` | **after every reindex** | 8,089 duplicate rows return to the index; one listing appeared 202x |
 | `sync_specs --source ibay --prune` | after each shopping reindex | facets reflect old attributes |
 | `translate_fields` | weekly | new documents show only one language |
 | `archive_documents --days 365` | monthly, off-peak | working set grows into shared_buffers |
