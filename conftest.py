@@ -15,3 +15,6 @@ def pytest_configure(config):
     settings.STREAM_DB_ALIAS = os.environ["STREAM_DB_ALIAS"]
     settings.SEARCH_LOGGING_SYNC = True
     settings.SEARCH_LOGGING_ENABLED = True
+    # Query-side translation would hit the real provider on every English
+    # query in tests. The query-translation tests override this per module.
+    settings.SEARCH_TRANSLATE_QUERIES = False

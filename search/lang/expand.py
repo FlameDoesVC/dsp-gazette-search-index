@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from django.conf import settings
+
 from search.lang.keymap import decode_keys
 from search.lang.normalize import normalize_text, strip_fili
 from search.lang.script import ENGLISH, KEYS, LATIN_DV, THAANA, detect_query_script
@@ -37,6 +39,7 @@ class QueryPlan:
     terms_dv: list[str] = field(default_factory=list)
     terms_latin: list[str] = field(default_factory=list)
     phrases: list[str] = field(default_factory=list)
+    translated_terms: list[str] = field(default_factory=list)
 
 
 def _dedupe(items: list[str], cap: int = MAX_TERMS_PER_SIDE) -> list[str]:
@@ -61,7 +64,41 @@ def _alias_expansions(tokens: list[str]) -> list[str]:
     return out
 
 
-def build_query_plan(q: str, *, use_aliases: bool = True) -> QueryPlan:
+def _translate_query(raw: str) -> str:
+    """Translate a whole English query to Dhivehi, cached in TranslationCache.
+
+    Whole query, not per token: Task 1's batch finding showed that neighbouring
+    words disambiguate ("ނީލަން ކިޔުން" alone became "Niland Reading" but "Public
+    auction" in context). The shared cache means the first plan for a query
+    pays one call and every later one -- and translate_auto itself -- hits.
+    """
+    import asyncio
+    import inspect
+
+    from core.models import TranslationCache
+    from core.translate import _hash, translate_auto
+
+    h = _hash(raw)
+    cached = TranslationCache.objects.filter(source_hash=h) \
+        .values_list("translated_text", flat=True).first()
+    if cached:
+        return cached
+    try:
+        result = translate_auto(raw)
+        if inspect.iscoroutine(result):
+            result = asyncio.run(result)
+    except Exception:
+        return ""
+    result = (result or "").strip()
+    if result:
+        TranslationCache.objects.get_or_create(
+            source_hash=h, defaults={"translated_text": result}
+        )
+    return result
+
+
+def build_query_plan(q: str, *, use_aliases: bool = True,
+                     translate: bool = True) -> QueryPlan:
     raw = q or ""
     phrases = [p.strip() for p in _PHRASE.findall(raw) if p.strip()]
     without_phrases = _PHRASE.sub(" ", raw)
@@ -120,4 +157,20 @@ def build_query_plan(q: str, *, use_aliases: bool = True) -> QueryPlan:
     plan.terms_en = _dedupe(en)
     plan.terms_dv = _dedupe(dv)
     plan.terms_latin = _dedupe(latin)
+
+    # Spec 5.5: an English query must be able to reach vector_dv. One cached
+    # call per unique query, not per document. A translator outage degrades
+    # to the lexical baseline; it never breaks English search.
+    if (translate and lang == ENGLISH
+            and getattr(settings, "SEARCH_TRANSLATE_QUERIES", True)):
+        translated = _translate_query(raw)
+        if translated:
+            norm = normalize_text(translated)
+            for token, sub_label in detect_query_script(norm)[1]:
+                if sub_label == THAANA:
+                    dv.append(token)
+                    dv.append(strip_fili(token))
+                    plan.translated_terms.append(token)
+            plan.terms_dv = _dedupe(dv)
+            plan.translated_terms = _dedupe(plan.translated_terms)
     return plan

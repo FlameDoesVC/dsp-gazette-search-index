@@ -124,7 +124,8 @@ def search_endpoint(
             "response_lang": response_lang,
             "expanded_terms": (result_page.plan.terms_en
                                + result_page.plan.terms_dv
-                               + result_page.plan.terms_latin),
+                               + result_page.plan.terms_latin
+                               + result_page.plan.translated_terms),
         },
         "query_id": query_id,
         "total": result_page.total,

@@ -259,6 +259,8 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 # --- background field translation (P5 task 0C) ---
 TRANSLATE_TIMEOUT = float(os.getenv("TRANSLATE_TIMEOUT", "30"))
 TRANSLATE_MIN_CHARS = int(os.getenv("TRANSLATE_MIN_CHARS", "3"))
+# Spec 5.5: English queries are translated to Dhivehi terms at query time.
+SEARCH_TRANSLATE_QUERIES = os.getenv("SEARCH_TRANSLATE_QUERIES", "1") == "1"
 
 # --- gettext catalog for closed vocabularies (P5 task 0C step 7) ---
 USE_I18N = True
