@@ -79,3 +79,19 @@ it splits on seller/price. Still ~40% of the corpus. `room daily rent`
 
 `dedupe_listings` added to the scheduled-jobs runbook -- must run after every
 reindex.
+
+## Task 8: backfills and final table
+
+| Fix | Before | After |
+|---|---|---|
+| translation throughput | 0.9s/title sequential | batched, 1 call / 8 titles (see Task 1; host-load dependent) |
+| 3-page sync wall clock | 4m30s | 1.4s |
+| `iphone` phones in top 10 | 0 | 1 (rank 10) |
+| "room daily rent" total | hundreds of copies | 1 survivor per group |
+| duplicate rows | 8,089 (raw titles) | 7,959 flagged (seller+title+price key) |
+| documents missing title_dv | 19,890 | in-flight backfill (TranslationCache-backed, so re-runs are cheap) |
+| recall@5 (eval gate) | 0.80 floor | held (711 tests green) |
+
+Pending as background jobs: `fill_bilingual` full pass (multi-hour, GPU-serial);
+`extract_attachments --no-transcribe` re-measure of the scanned fraction at the
+current corpus size (the 40.3% figure predates the corpus growing to 1,245+).
