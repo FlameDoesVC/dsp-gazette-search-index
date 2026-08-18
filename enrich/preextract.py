@@ -44,16 +44,38 @@ _MONEY_PATTERNS = [
 # sentence is allowed -- '4,400.' is an amount, '4,400.50' is a decimal.
 _BARE_AMOUNT = re.compile(rf"(?<![\d,.])({_NUM})(?![,\d]|\.\d)")
 
-# P7 replaces this constant with the SpecKey unit vocabulary (spec 4.4). Until
-# then it is a fixed list, ordered longest-first so 'mAh' wins over 'A'.
-UNIT_VOCAB = [
+# P7 moved the unit vocabulary into the SpecKey registry (spec 4.4) so adding
+# a unit is an admin row. This fixed list is the fallback when the registry is
+# empty, which it is in a fresh database and during P4's own tests.
+_FALLBACK_UNIT_VOCAB = [
     "kWh", "mAh", "GHz", "MHz", "sqft", "inch", "kW", "GB", "TB", "MB",
     "kg", "ml", "cm", "mm", "V", "A", "W", "L", '"',
 ]
-_UNIT = re.compile(
-    rf"(?<![A-Za-z\d])({_NUM})\s*({'|'.join(re.escape(u) for u in UNIT_VOCAB)})"
-    r"(?![A-Za-z])"
-)
+
+
+def unit_vocab() -> list[str]:
+    """P7 moved this into the SpecKey registry so adding a unit is an admin
+    row (spec 4.4). Falls back to the fixed list when the registry is empty."""
+    try:
+        from search.specs.extract import unit_vocabulary
+        vocab = unit_vocabulary()
+    except Exception:
+        vocab = []
+    return vocab or _FALLBACK_UNIT_VOCAB
+
+
+_UNIT_CACHE: tuple[int, re.Pattern] | None = None
+
+
+def _unit_pattern() -> re.Pattern:
+    global _UNIT_CACHE
+    vocab = unit_vocab()
+    fingerprint = hash(tuple(vocab))
+    if _UNIT_CACHE is None or _UNIT_CACHE[0] != fingerprint:
+        alt = "|".join(re.escape(u) for u in vocab)
+        _UNIT_CACHE = (fingerprint, re.compile(
+            rf"(?<![A-Za-z\d])({_NUM})\s*({alt})(?![A-Za-z])"))
+    return _UNIT_CACHE[1]
 
 _ISO_DATE = re.compile(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})")
 _DMY_DATE = re.compile(r"(\d{1,2})[-/](\d{1,2})[-/](20\d{2})")
@@ -183,7 +205,7 @@ def extract_candidates(text: str) -> Candidates:
 
     units: list[dict] = []
     unit_spans: list[tuple[int, int]] = []
-    for m in _UNIT.finditer(text):
+    for m in _unit_pattern().finditer(text):
         raw = m.group(1)
         # A four-digit run that reads as a year is a model year, not a unit
         # value -- 'Model year 2019 A/C unit' must not yield a 2019 A-unit.
