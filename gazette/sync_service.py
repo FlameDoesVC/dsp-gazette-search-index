@@ -13,7 +13,6 @@ from gazette.scraper import (
     fetch_index_links,
     get_max_page_number,
 )
-from core.translate import translate_auto, sentence_boundary
 
 logger = logging.getLogger(__name__)
 
@@ -22,30 +21,12 @@ MAX_INDEX_PAGES = int(
     os.getenv("GAZETTE_MAX_INDEX_PAGES", "2" if settings.DEBUG else "3500")
 )
 MAX_CONCURRENT_REQUESTS = 3
-TRANSLATE_CONCURRENCY = 2
 REQUEST_DELAY = 0.5
 SYNC_INTERVAL_SECONDS = 300
-TRANSLATE_CHUNK_SIZE = 4500
 
 
 def _strip_html(html_text):
     return BeautifulSoup(html_text, "html.parser").get_text()
-
-
-async def _translate_body(html_body):
-    text = _strip_html(html_body)
-    if not text.strip():
-        return ""
-    results = []
-    pos = 0
-    while pos < len(text):
-        chunk_size = sentence_boundary(text[pos:], TRANSLATE_CHUNK_SIZE)
-        chunk = text[pos:pos + chunk_size]
-        pos += chunk_size
-        translated = await translate_auto(chunk)
-        if translated:
-            results.append(translated)
-    return " ".join(results)
 
 
 async def sync_all():
@@ -161,58 +142,6 @@ async def sync_all():
             "Successfully fetched %d new announcements. Failed: %d.",
             type_fetched_count, type_failed_count,
         )
-
-        from django.db.models import Q
-
-        logger.info("--- Starting translation pass ---")
-        translated_count = 0
-        translate_queue = asyncio.Queue()
-
-        async def translate_worker():
-            nonlocal translated_count
-            while True:
-                iulaan = await translate_queue.get()
-                try:
-                    changed = False
-
-                    if not iulaan.translated_title:
-                        trans = await translate_auto(iulaan.title)
-                        if trans:
-                            iulaan.translated_title = trans
-                            logger.info("  Translated title: %s → %s", iulaan.title[:40], trans[:40])
-                            changed = True
-
-                    if iulaan.body:
-                        tbody = await _translate_body(iulaan.body)
-                        if tbody:
-                            iulaan.translated_body = tbody
-                            changed = True
-
-                    if changed:
-                        await iulaan.asave(update_fields=["translated_title", "translated_body"])
-                        translated_count += 1
-                except Exception:
-                    logger.exception("Unexpected error translating %s", iulaan.id)
-                finally:
-                    translate_queue.task_done()
-
-        translate_workers = [
-            asyncio.create_task(translate_worker())
-            for _ in range(TRANSLATE_CONCURRENCY)
-        ]
-
-        async for iulaan in Iulaan.objects.filter(
-            Q(translated_title="") | Q(translated_body="")
-        ).aiterator():
-            await translate_queue.put(iulaan)
-
-        await translate_queue.join()
-        for worker in translate_workers:
-            worker.cancel()
-        await asyncio.gather(*translate_workers, return_exceptions=True)
-
-        if translated_count:
-            logger.info("Translated %d iulaans.", translated_count)
 
     logger.info(
         "Sync summary: %d new, %d fetched, %d failed.",
