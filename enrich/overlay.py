@@ -60,6 +60,15 @@ def apply_enrichment(draft: DocumentDraft) -> DocumentDraft:
 
     draft.attrs = {**draft.attrs, **attrs_model.model_dump()}
 
+    # The only figure comparable across ads that itemize differently, so it is
+    # what the salary facet and the salary sort read. Spec 4.3.2, 7.
+    if draft.doc_type == "job":
+        from enrich.compensation import estimate_net
+        est = estimate_net(attrs_model.compensation)
+        draft.attrs["estimated_net_min"] = (
+            round(est.value, 2) if est else attrs_model.compensation.basic_salary
+        )
+
     base = dict(draft.card)
     base.setdefault("source", draft.source)
     base.setdefault("title", draft.title_en or draft.title_dv)

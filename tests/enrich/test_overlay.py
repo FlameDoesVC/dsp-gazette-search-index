@@ -104,3 +104,15 @@ def test_the_overlay_never_clears_stale_marked_at():
                                   stale_marked_at=timezone.now())
     apply_enrichment(_draft())
     assert SearchDocument.objects.get().stale_marked_at is not None
+
+
+@pytest.mark.django_db
+def test_estimated_net_min_is_written_for_the_salary_facet():
+    EnrichedRecord.objects.create(
+        source="gazette", source_key="IUL-1", content_hash="h" * 64,
+        doc_type="job", status="ok",
+        attrs={"compensation": {"basic_salary": 10750, "salary_state": "listed",
+                                "pension_applies": True, "completeness": "basic_only"}},
+    )
+    out = apply_enrichment(_draft())
+    assert out.attrs["estimated_net_min"] == pytest.approx(9997.50)

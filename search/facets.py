@@ -54,6 +54,8 @@ JOB_FACETS = [
        widget="checkbox", storage="attrs", path="employer", top_n=20),
     _f(key="grade", label_en="Grade", label_dv="ގްރޭޑް",
        widget="checkbox", storage="attrs", path="grade"),
+    _f(key="deadline", label_en="Deadline", label_dv="ސުންގަޑި",
+       widget="checkbox", storage="column", path="expires_at"),
     _LOCATION,
     _SOURCE,
 ]

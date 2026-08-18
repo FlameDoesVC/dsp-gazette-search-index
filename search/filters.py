@@ -134,7 +134,24 @@ def filter_sql(filters: list[Filter]) -> tuple[str, dict]:
         d = f.definition or facet_def(None, f.key)
         p = f"flt{i}"
 
-        if f.op == "range":
+        if d.key == "deadline":
+            # Values are open | closing_soon | closed, derived at query time.
+            # Never stored: a gazette row is written once and would otherwise
+            # advertise a closed vacancy as open forever (spec 8).
+            wanted = set(f.values)
+            parts = []
+            if "open" in wanted:
+                parts.append("(d.expires_at IS NULL OR d.expires_at >= now())")
+            if "closing_soon" in wanted:
+                parts.append(
+                    "(d.expires_at >= now() AND "
+                    "d.expires_at < now() + interval '7 days')"
+                )
+            if "closed" in wanted:
+                parts.append("(d.expires_at IS NOT NULL AND d.expires_at < now())")
+            clauses.append("(" + " OR ".join(parts) + ")" if parts else "TRUE")
+
+        elif f.op == "range":
             expr = _expr(d)
             cast = expr if d.storage == "column" else f"({expr})::numeric"
             if f.lo is not None:
