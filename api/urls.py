@@ -1,6 +1,6 @@
 from ninja import NinjaAPI
 
-from api.routers import meta, search
+from api.routers import meta, search, suggest
 
 api = NinjaAPI(
     title="Beynunehcheh",
@@ -15,3 +15,4 @@ api = NinjaAPI(
 
 api.add_router("", meta.router, tags=["meta"])
 api.add_router("", search.router, tags=["search"])
+api.add_router("", suggest.router, tags=["suggest"])

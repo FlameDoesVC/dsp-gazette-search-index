@@ -101,3 +101,24 @@ class QueryAlias(models.Model):
 
     def __str__(self):
         return self.term
+
+
+class SuggestTerm(models.Model):
+    """Autocomplete vocabulary. Spec 9.
+
+    Derived and disposable, like SearchDocument: rebuilt from titles by
+    `rebuild_suggest_terms`. Trigram-searched here rather than over the
+    documents themselves because a substring match across 71,445 titles is a
+    sequential scan on every keystroke.
+    """
+
+    term = models.CharField(max_length=64, unique=True)
+    frequency = models.IntegerField(default=0)
+    script = models.CharField(max_length=8)     # latin | thaana
+    doc_type = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["-frequency"], name="suggest_freq")]
+
+    def __str__(self):
+        return self.term
