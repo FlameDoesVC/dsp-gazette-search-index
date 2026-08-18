@@ -208,3 +208,90 @@ class DocumentReport(models.Model):
         ]
         indexes = [models.Index(fields=["status", "-created_at"],
                                 name="report_status_created")]
+
+
+class SpecKey(models.Model):
+    """The curated facet registry. Spec 4.4.
+
+    Extraction is open -- the unit extractor and the LLM may produce any
+    key_raw -- but only a key promoted here with is_facetable=True becomes a
+    filter. Everything else is stored, shown on the detail page, and queued for
+    one-click promotion. That asymmetry is what keeps the attribute space from
+    degenerating into thousands of junk facets while still letting a new
+    product category arrive without a schema change.
+    """
+
+    DATATYPES = [("numeric", "numeric"), ("enum", "enum"), ("bool", "bool")]
+    WIDGETS = [("range", "range"), ("checkbox", "checkbox"), ("toggle", "toggle")]
+
+    key = models.CharField(max_length=64, unique=True)
+    label_en = models.CharField(max_length=64)
+    label_dv = models.CharField(max_length=64, blank=True)
+    datatype = models.CharField(max_length=16, choices=DATATYPES)
+    unit = models.CharField(max_length=16, blank=True)
+    unit_aliases = models.JSONField(default=list, blank=True)
+    value_aliases = models.JSONField(default=dict, blank=True)
+    widget = models.CharField(max_length=16, choices=WIDGETS, default="checkbox")
+    # Leaf categories where this key is meaningful. Empty means "anywhere",
+    # which is right for `brand` and wrong for `Type`.
+    categories = models.JSONField(default=list, blank=True)
+    priority = models.IntegerField(default=100)
+    is_facetable = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["priority", "key"]
+
+    def __str__(self):
+        return self.key
+
+    def resolve_value(self, raw: str) -> str:
+        v = (raw or "").strip()
+        return self.value_aliases.get(v, v)
+
+    def matches_unit(self, u: str) -> bool:
+        u = (u or "").strip().lower()
+        if not u:
+            return False
+        if u == (self.unit or "").lower():
+            return True
+        return u in {a.lower() for a in self.unit_aliases}
+
+
+class DocumentSpec(models.Model):
+    """One row per extracted attribute. Spec 4.4.
+
+    Relational rather than JSONB because facet discovery is an aggregation
+    over the candidate set, and GROUP BY on indexed columns beats unnesting a
+    JSONB array on every request. Volume is small: ~20,000 products times ~4
+    specs, under 100,000 rows.
+    """
+
+    # SearchDocument is LIST-partitioned, so a real FK constraint is not
+    # available (spec 12.2). A dangling row is inert; sync_specs prunes them.
+    document = models.ForeignKey("search.SearchDocument", on_delete=models.DO_NOTHING,
+                                 db_constraint=False, related_name="specs")
+    key = models.ForeignKey(SpecKey, null=True, blank=True,
+                            on_delete=models.SET_NULL, related_name="values")
+    key_raw = models.CharField(max_length=64)
+    value_num = models.FloatField(null=True, blank=True)
+    value_text = models.CharField(max_length=128, blank=True)
+    unit = models.CharField(max_length=16, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["document", "key_raw", "value_num", "value_text"],
+                name="uniq_documentspec_value",
+                nulls_distinct=False,
+            )
+        ]
+        indexes = [
+            models.Index(fields=["document"], name="docspec_document"),
+            models.Index(fields=["key", "value_text"], name="docspec_key_text"),
+            models.Index(fields=["key", "value_num"], name="docspec_key_num"),
+            models.Index(fields=["key_raw"], name="docspec_key_raw"),
+        ]
+
+    def __str__(self):
+        return f"{self.key_raw}={self.value_num or self.value_text}{self.unit}"
