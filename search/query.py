@@ -32,6 +32,7 @@ class SearchResult:
     card: dict[str, Any]
     score: float
     matched_lang: str
+    thumbnails: list = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -158,7 +159,7 @@ def _base_params(plan: QueryPlan, doc_type, candidate_limit) -> dict:
 def _to_result(row, plan: QueryPlan) -> SearchResult:
     (doc_id, source, source_key, dtype, url,
      title_en, title_dv, summary_en, summary_dv, card,
-     _price, _thumbnails,
+     _price, thumbnails,
      r_en, r_dv, r_latin, score, _total) = row
 
     if r_dv and r_dv >= max(r_en, r_latin):
@@ -181,6 +182,8 @@ def _to_result(row, plan: QueryPlan) -> SearchResult:
         card=json.loads(card) if isinstance(card, str) else (card or {}),
         score=float(score),
         matched_lang=matched,
+        thumbnails=json.loads(thumbnails) if isinstance(thumbnails, str)
+                   else (thumbnails or []),
     )
 
 
