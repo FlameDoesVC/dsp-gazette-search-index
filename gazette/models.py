@@ -55,6 +55,7 @@ class Attachment(models.Model):
         ("ok", "ok"),
         ("ocr_failed", "ocr_failed"),
         ("fetch_failed", "fetch_failed"),
+        ("extract_failed", "extract_failed"),
         ("skipped", "skipped"),
     ]
     METHOD = [

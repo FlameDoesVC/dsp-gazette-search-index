@@ -32,7 +32,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--no-transcribe",
             action="store_true",
-            help="Skip the paid rung; scanned PDFs record ocr_failed.",
+            help="Measure the scanned fraction without spending. Leaves "
+                 "scanned PDFs pending so a later paid run still picks them up.",
         )
         parser.add_argument(
             "--stale",
@@ -88,6 +89,8 @@ class Command(BaseCommand):
         to_transcribe: list[transcribe.TranscriptionItem] = []
         by_id: dict[str, Attachment] = {}
         done = 0
+        scanned = 0
+        local_ok = 0
 
         for attachment in pending.iterator(chunk_size=100):
             attachment.attempts += 1
@@ -111,10 +114,15 @@ class Command(BaseCommand):
 
             if result.method == "pdftotext" and local.needs_transcription(result):
                 if options["no_transcribe"]:
-                    attachment.status = "ocr_failed"
+                    # Record the routing decision, spend nothing, and leave the
+                    # attachment reprocessable. `ocr_failed` here would be
+                    # terminal (spec 5.7) and would silently disable the paid
+                    # run this measurement exists to budget for.
+                    attachment.status = "pending"
                     attachment.page_count = result.page_count
                     attachment.chars_per_page = result.chars_per_page
                     attachment.save()
+                    scanned += 1
                     continue
                 to_transcribe.append(
                     transcribe.TranscriptionItem(
@@ -124,19 +132,30 @@ class Command(BaseCommand):
                 by_id[str(attachment.id)] = attachment
                 attachment.page_count = result.page_count
                 attachment.chars_per_page = result.chars_per_page
+                # Flush here, not after the local-extraction path: a run of
+                # consecutive scanned PDFs never reaches a check placed below
+                # this `continue`, and each queued item holds a whole PDF.
+                if len(to_transcribe) >= options["batch_size"]:
+                    done += self._flush(to_transcribe, by_id)
+                    to_transcribe, by_id = [], {}
                 continue
 
             self._store(attachment, result)
             done += 1
-
-            if len(to_transcribe) >= options["batch_size"]:
-                done += self._flush(to_transcribe, by_id)
-                to_transcribe, by_id = [], {}
+            local_ok += 1
 
         if to_transcribe:
             done += self._flush(to_transcribe, by_id)
 
-        self.stdout.write(self.style.SUCCESS(f"extracted {done} attachments"))
+        if options["no_transcribe"]:
+            total = scanned + local_ok
+            pct = (100.0 * scanned / total) if total else 0.0
+            self.stdout.write(self.style.SUCCESS(
+                f"measured {total} PDFs: {scanned} scanned ({pct:.1f}%), "
+                f"{local_ok} had a text layer. Nothing was spent."
+            ))
+        else:
+            self.stdout.write(self.style.SUCCESS(f"extracted {done} attachments"))
 
     def _flush(self, items, by_id) -> int:
         self.stdout.write(f"transcribing {len(items)} scanned PDFs...")
@@ -159,7 +178,14 @@ class Command(BaseCommand):
             attachment.page_count = result.page_count
         if result.chars_per_page is not None:
             attachment.chars_per_page = result.chars_per_page
-        attachment.status = "ok" if result.status == "ok" and attachment.text else (
-            "ocr_failed" if result.method == "transcribed" else "fetch_failed"
-        )
+        if result.status == "ok" and attachment.text:
+            attachment.status = "ok"
+        elif result.method == "transcribed":
+            # The vision model ran and produced nothing usable. Terminal:
+            # retrying re-bills the same document.
+            attachment.status = "ocr_failed"
+        else:
+            # The bytes arrived; the parser could not use them. Not terminal,
+            # but not a fetch failure either.
+            attachment.status = "extract_failed"
         attachment.save()
