@@ -350,7 +350,15 @@ KINDS = [
     ("other", "other"),
 ]
 
-_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9()/.\-]*")
+# The alternation matters. Without the first branch, a leading `(IUL)` glues onto
+# the number -- `(IUL)171-Y(FBM2)/IUL/2026/146` tokenizes as `IUL)171-...`, whose
+# extra letters change value_key so it no longer matches the bare form in the
+# translation. Consuming `(IUL)` as its own token (rejected: no digits) leaves the
+# number intact, and an internal code like `(FBM2)` is unaffected because it never
+# leads. The `:` in the second branch keeps a URL as ONE token: without it
+# `https://x/1/2` splits at the colon and the tail no longer contains `https:`,
+# so it slips past _URLISH.
+_TOKEN = re.compile(r"\([A-Za-z]+\)|[A-Za-z0-9][A-Za-z0-9()/.\-:]*")
 _TRIM = ".,);:'\""
 _MIN_LEN = 7
 
@@ -441,10 +449,16 @@ def classify_kind(preceding_text: str) -> str:
     the number, so kind is display metadata.
     """
     window = re.sub(r"\s+", " ", (preceding_text or ""))[-LABEL_WINDOW:]
+    # Rightmost match wins, not first-rule-in-list. The window is 60 characters
+    # and identifiers sit close together, so a previous line's `Project Number:`
+    # bleeds into the next identifier's window and mislabels it. The label
+    # NEAREST the identifier is the one that names it.
+    best_kind, best_pos = "other", -1
     for pattern, kind in _LABEL_RULES:
-        if pattern.search(window):
-            return kind
-    return "other"
+        match = pattern.search(window)
+        if match and match.start() > best_pos:
+            best_kind, best_pos = kind, match.start()
+    return best_kind
 
 
 def extract(thaana_text: str, translated_text: str) -> list[dict]:
