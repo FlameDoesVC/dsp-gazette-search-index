@@ -431,12 +431,35 @@ SERVICE_HINT = re.compile(r"servic|repair|maintenance|maraamathu|installation|"
 
 
 def infer_tier(path: list[str]) -> str:
+    """Propose a tier from the shape of a source path.
+
+    Two rules here are not obvious and were both established by running this
+    against the live corpus rather than by reading the tree:
+
+    - `path[1]` is the FAMILY segment and is excluded from the accessory test.
+      iBay names families after their contents, so `Mobile Phones & Accessories`
+      ends in "Accessories" while its `Mobile Phones` child (507 documents) is
+      the most important primary node in the corpus. Including path[1] classifies
+      it as an accessory and breaks the one thing tier exists to decide.
+    - Parts is tested BEFORE accessory, because `Mobile Phones & Accessories >
+      Parts > Battery` matches both and is a part.
+
+    A mid-level segment that merely ENDS with "Accessories" does count:
+    `Laptop Accessories > Charger` and `Camera Accessories > Lenses` are
+    accessories, and an exact-match test alone leaves 30 such nodes claiming to
+    be primary products.
+    """
     if len(path) == 1:
         return "family"
-    if "Accessories" in path[1:-1] or path[-1].endswith("Accessories"):
-        return "accessory"
-    if "Parts" in path[1:-1]:
+    mid = path[1:-1]
+    below_family = path[2:-1]
+    if "Parts" in mid or any(
+            s == "Parts" or s.endswith(" Parts") or s.endswith("& Parts")
+            for s in below_family):
         return "part"
+    if "Accessories" in mid or path[-1].endswith("Accessories") or any(
+            s.endswith("Accessories") for s in below_family):
+        return "accessory"
     if path[0] == "Services" or SERVICE_HINT.search(path[-1] or ""):
         return "service"
     return "primary"
@@ -546,6 +569,26 @@ class SourceCategoryMapAdmin(admin.ModelAdmin):
     ordering = ("-document_count",)
 ```
 
+- [ ] **Step 7b: Pin `infer_tier` with tests**
+
+The heuristic above is the part of this task most likely to be quietly wrong,
+and the eight model tests do not touch it. Append to
+`tests/search/test_taxonomy.py` a parametrized `test_infer_tier` covering, at
+minimum, these cases, which are the ones two earlier versions of the rule got
+wrong:
+
+| path | expected | why it is a trap |
+|---|---|---|
+| `For Sale > Mobile Phones & Accessories > Mobile Phones` | `primary` | family named after its contents |
+| `... > Accessories > Charger` | `accessory` | exact segment |
+| `... > Parts > Battery` | `part` | matches both rules; Parts must win |
+| `... > Laptop Accessories > Charger` | `accessory` | mid-level segment only ends with the word |
+| `For Sale > Clothing & Accessories > Watches` | `primary` | family again |
+| `For Sale > Home & Garden > Aircon Servicing & Repair` | `service` | service by leaf name, not by root |
+
+Plus a `JUNK_LEAF` test asserting it matches `General / Other`, `Other` and
+`Other Stuff` but not `Mobile Phones`, `Charger` or `Other Accessories`.
+
 - [ ] **Step 8: Seed against the real corpus and review**
 
 Run:
@@ -553,8 +596,13 @@ Run:
 python manage.py seed_taxonomy --source ibay        # dry run, read the output
 python manage.py seed_taxonomy --source ibay --apply
 ```
-Expected: about 278 mappings, and the two `Charger` paths resolving to two
-different keys. Confirm that specifically:
+Measured on 2026-08-19: **306 distinct paths, 20,257 documents**, and the tier
+split comes out `primary 163, service 70, accessory 42, part 25, family 6`. If
+`primary` lands near 192 instead, `infer_tier` is the exact-match version and 30
+accessory nodes are claiming to be products.
+
+Confirm the two `Charger` paths resolve to two different keys
+(`accessories-charger` and `laptop-accessories-charger`):
 
 ```bash
 python manage.py shell -c "

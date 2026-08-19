@@ -307,3 +307,72 @@ class DocumentSpec(models.Model):
 
     def __str__(self):
         return f"{self.key_raw}={self.value_num or self.value_text}{self.unit}"
+
+
+class Category(models.Model):
+    """The canonical taxonomy. Source-independent by design.
+
+    iBay happens to publish a hierarchy with `Accessories` and `Parts` as
+    literal path segments; gazette publishes none, and a future source may
+    publish flat or wrong tags. Sources map INTO this tree (SourceCategoryMap)
+    and query parsing reads only this.
+
+    `tier` is curated per node rather than parsed from a path segment, because
+    the segment exists in exactly one source's paths.
+    """
+
+    TIERS = [("family", "family"), ("primary", "primary product"),
+             ("accessory", "accessory"), ("part", "part"),
+             ("service", "service")]
+
+    key = models.SlugField(max_length=64, unique=True)
+    label_en = models.CharField(max_length=128)
+    label_dv = models.CharField(max_length=128, blank=True)
+    parent = models.ForeignKey("self", null=True, blank=True,
+                               on_delete=models.PROTECT, related_name="children")
+    tier = models.CharField(max_length=16, choices=TIERS)
+    doc_type = models.CharField(max_length=32, blank=True)
+    # Query words that should select this node but are absent from its label.
+    # Measured in P10: 440 titles say "glass" and no label contains it.
+    aliases = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "categories"
+        ordering = ["key"]
+
+    def __str__(self):
+        return self.key
+
+
+class SourceCategoryMap(models.Model):
+    """One row per distinct source category path.
+
+    Keyed on the full path, not the leaf: iBay spells `Charger` under two
+    different families and `Car Accessories` under two more, so a leaf-keyed
+    map merges categories that rank and facet differently.
+
+    `category = NULL` is a legal, reviewed decision meaning "no canonical
+    category for this path", and is not the same as an absent row, which means
+    "not yet reviewed".
+    """
+
+    source = models.CharField(max_length=32)
+    path = models.JSONField(default=list)
+    path_key = models.CharField(max_length=64)
+    category = models.ForeignKey(Category, null=True, blank=True,
+                                 on_delete=models.SET_NULL,
+                                 related_name="source_paths")
+    note = models.CharField(max_length=256, blank=True)
+    document_count = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["source", "path_key"],
+                                    name="uniq_sourcecategory_path")
+        ]
+        indexes = [models.Index(fields=["source", "-document_count"],
+                                name="sourcecat_source_count")]
+
+    def __str__(self):
+        return f"{self.source}: {' > '.join(self.path)}"

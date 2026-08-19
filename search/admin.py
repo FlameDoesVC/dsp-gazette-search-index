@@ -6,7 +6,8 @@ from django.urls import path, reverse
 from django.utils import timezone
 
 from search.models import (
-    DocumentReport, DocumentSpec, QueryAlias, SearchDocument, Source, SpecKey,
+    Category, DocumentReport, DocumentSpec, QueryAlias, SearchDocument, Source,
+    SourceCategoryMap, SpecKey,
 )
 from search.specs.project import candidate_keys
 
@@ -105,6 +106,27 @@ class SpecKeyAdmin(admin.ModelAdmin):
         # Never deletes DocumentSpec rows: the detail-page spec table still
         # shows them, and re-promoting must not require a re-sync.
         queryset.update(is_facetable=False)
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ("key", "label_en", "label_dv", "tier", "parent",
+                    "doc_type", "is_active")
+    list_editable = ("tier", "doc_type", "is_active")
+    list_filter = ("tier", "is_active")
+    search_fields = ("key", "label_en", "label_dv")
+    ordering = ("key",)
+
+
+@admin.register(SourceCategoryMap)
+class SourceCategoryMapAdmin(admin.ModelAdmin):
+    """Sorted by document_count so the paths that matter are reviewed first."""
+
+    list_display = ("__str__", "source", "category", "document_count", "note")
+    list_editable = ("category", "note")
+    list_filter = ("source", ("category", admin.EmptyFieldListFilter))
+    search_fields = ("path",)
+    ordering = ("-document_count",)
 
 
 def _promote(key_raw: str) -> SpecKey:
