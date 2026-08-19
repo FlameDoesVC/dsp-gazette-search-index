@@ -7,7 +7,10 @@ Depends on: the catalog normalization project (entity layer, provenance ladder,
 
 ## 1. Goal
 
-Two defects in what the system currently shows, sharing one extraction pass.
+Two defects in what the system currently shows. They are specified together
+because they are reviewed and deployed together, not because they share
+machinery: identifier extraction turned out to need no model at all, while
+spelling correction hooks into the existing profile pass.
 
 A gazette notice cites reference numbers that identify the thing it is about --
 a project, an announcement, a bid committee meeting. Those numbers appear in
@@ -111,7 +114,56 @@ Two calibrations matter. The bare token `Rosewear` produced **no** correction;
 extracted name. And an exact-phrase search for the misspelled full name returned
 **zero** results, which is a second, independent signal that a spelling is wrong.
 
-### 3.4 What cannot be used as a guard
+### 3.4 Identifiers survive translation, and that is the extractor
+
+An identifier is by definition a token translation does not touch, so the tokens
+appearing verbatim in **both** the Thaana and the translated text are almost
+exactly the identifier set. Measured on iulaan 408123, the intersection is four
+tokens and all four are identifiers, with no noise at all:
+
+```
+171-Y(FBM2)/IUL/2026/146      171-Y(FMB2)/IUL/2026/166
+PC-171/2026/T327              BC-171/2026/094
+```
+
+Across the 29 iulaan that have a translated body, the invariant set averages 13.5
+tokens and everything that is not an identifier is trivially rejected: `a`,
+`email`, `https`, `protected`, `2026`, bare numbers.
+
+Recall needed two corrections to be usable, and both were already in this design
+for other reasons:
+
+| | recall |
+|---|---|
+| intersect raw token strings | 44.7% |
+| intersect on `value_key`, require a `/` | **90.5%** |
+
+The 44.7% figure was not translation losing numbers. It was `19/2014` in one text
+against `19/2014.` in the other, and `col-md-12` -- **HTML class leakage in the
+scraped body** -- counting as a candidate. Intersecting on `value_key` absorbs the
+punctuation, and requiring a `/` excludes CSS classes, which no real identifier
+lacks and no class has.
+
+Of the 4 remaining misses, 3 should not be identifiers at all
+(`www.csc.gov.mv/download/2024/84/Annex` is a URL, `7924894/3315555` is two phone
+numbers joined by a slash) and 1 is a genuine identifier the translation dropped.
+**One true miss in 42.**
+
+### 3.5 Kind is usually stated in the text
+
+Of 31 identifiers in translated bodies, 13 are immediately preceded by a label:
+
+```
+project number        announcement number       in response to announcement number
+authority number      bid committee in meeting number
+job opportunity number     has been granted license number
+```
+
+The other 18 have none. So kind is derivable for those that state it and unknown
+for the rest -- which is acceptable because kind is display metadata only. The
+link searches the number; an unlabelled identifier links exactly as well.
+
+### 3.6 What cannot be used as a guard
 
 `search/lang/translit.py` cannot validate these corrections.
 `translit_latin_variants("rosewear")` returns only the input, and
@@ -121,35 +173,53 @@ written in Thaana. Measured before relying on it.
 
 ## 4. Identifier extraction
 
-**The model classifies; regex only proposes.** This is the reverse of the
-project's usual order, and section 3.1 is why: the kind of a number is carried by
-the words around it, not by its shape.
-
-Stage-2 output gains an `identifiers` list. Each entry:
+**No model call. None.** This reverses what an earlier draft of this spec
+specified, and section 3.4 is why: translation gives us a free, exact oracle for
+"which tokens are identifiers", and it outperforms asking a model to find them.
 
 ```
-value        verbatim, exactly as it appears
-kind         project | announcement | bid_committee | invoice | contract |
-             tender | lot | other
-label_raw    the words that identified it ("Project Number", "meeting number")
+candidates(text) = { token for token in text
+                     if "/" in token
+                     and token has a digit
+                     and len(token) > 6
+                     and token is not a URL       (www. or http)
+                     and token is not two phones joined by a slash }
+
+identifiers(doc) = { c for c in candidates(thaana_text)
+                     if value_key(c) in { value_key(x) for x in
+                                          candidates(translated_text) } }
 ```
 
-Rules the prompt states and the validator enforces:
+The display form is the Thaana-side spelling, because that is the source of
+record. Kind comes from a curated label vocabulary matched against the words
+immediately preceding the identifier in the **translated** text, since the labels
+are English there:
 
-- **`value` must appear verbatim** in the document's title, body, translated
-  title, translated body, or `additional_info`. A value that does not is dropped,
-  not demoted -- unlike a spec, an invented identifier is not "possibly true
-  about the world", it is a broken link. This is stricter than
-  `catalog/tiers.py`, deliberately.
-- **`kind` outside the enum becomes `other`.** The list is closed; a new kind is
-  a schema change and a prompt change, reviewed together.
-- **Regex is a recall net.** A candidate pattern proposes identifier-shaped
-  strings the model did not return; those are stored with `kind="other"` and
-  `label_raw=""`. They are still linkable, they just carry no claim about what
-  they are. The pattern never overrides a model classification.
+| label pattern | kind |
+|---|---|
+| `project number` | `project` |
+| `announcement number`, `iulaan number` | `announcement` |
+| `bid committee`, `meeting number` | `bid_committee` |
+| `job opportunity number` | `job` |
+| `license number`, `authority number` | `license` |
+| `ref`, `reference` | `reference` |
+| no label matched | `other` |
+
+Three consequences of doing it this way:
+
+- **Nothing can be invented.** A candidate exists only if it appears in both
+  texts, so the grounding rule an earlier draft needed as a separate validator is
+  now structural. There is no path by which a fabricated number reaches the index.
+- **It costs nothing and can be re-run freely**, so a fix to the label vocabulary
+  is a re-run rather than a re-spend.
+- **It requires a translated body.** Only 29 of 125 local iulaan have one, so
+  identifier extraction is gated on translation having run for that document.
+  This is a real sequencing dependency, stated in section 9.
 
 The document's own scraped `ނަންބަރު` is inserted directly with
-`kind="announcement"` and needs no model call.
+`kind="announcement"` and `is_own=True`, needing neither translation nor a model.
+That means every document with a scraped number gets at least one identifier
+immediately, even before translation.
 
 ## 5. Normalization: `value_key`
 
@@ -307,7 +377,12 @@ The probe is not billed but it is rate-limited by politeness, not by contract, s
 
 ## 9. Error handling and idempotency
 
-- An identifier that fails verbatim grounding is dropped and counted, not stored.
+- **Extraction requires a translated body**, so it runs after translation, and a
+  document whose translation has not run yields only its own scraped number.
+  Re-running after translation is how the rest arrive; nothing is lost, it is
+  merely late. `translate_fields` is already a scheduled job.
+- Grounding is structural rather than validated: a candidate that is not in both
+  texts never becomes a row, so there is nothing to drop and count.
 - Re-running extraction is idempotent: the unique constraint is the occurrence,
   so a repeat pass updates nothing.
 - A `SpellingCorrection` marked `rejected` is never applied again, and the
@@ -323,9 +398,15 @@ whole design: three identifier kinds, a shape a naive pattern would miss
 (`T327`), the `FBM2`/`FMB2` within-document variant, and a company name DDG
 corrects.
 
-- Extraction: all three identifiers found with correct kinds; `BC-171/2026/094`
-  classified from prose, not shape.
-- Grounding: an identifier the model invents is dropped.
+- Extraction: the invariant intersection returns exactly the four identifiers on
+  408123 and nothing else, including the `/146` form and both `FBM2`/`FMB2`
+  spellings.
+- Filters: a URL (`www.csc.gov.mv/download/2024/84/Annex`), a CSS class
+  (`col-md-12`) and two slash-joined phone numbers (`7924894/3315555`) are all
+  rejected.
+- Kind: `BC-171/2026/094` classified `bid_committee` from its label; an
+  identifier with no label gets `other` and still links.
+- A document with no translated body yields exactly its own scraped number.
 - Normalization: the four pairs in section 5, both directions.
 - Retrieval: searching either spelling of the announcement number returns the
   document; an identifier-shaped query outranks lexical matches; a normal query
@@ -337,16 +418,20 @@ corrects.
   token-level alias; and a correction whose two sides have different token counts
   writes no alias at all.
 
-Measurements to record: identifiers per document by kind, the share of cited
-numbers that resolve to another document in the corpus (the linking payoff),
-corrections proposed against corrections accepted by the guard, and probe cache
-hit rate.
+Measurements to record: identifiers per document by kind, split by whether the
+document has a translated body; recall against a hand-checked sample (90.5%
+measured on 42 candidates, with 1 true miss); the share of cited numbers that
+resolve to another document in the corpus, which is the linking payoff and the
+only figure that says whether this was worth building; corrections proposed
+against corrections accepted by the skeleton guard; and probe cache hit rate.
 
 ## 11. Relationship to other work
 
-The catalog project supplies the stage-2 pass this extends, so identifiers and
-names cost no extra model call -- the reason for specifying them together rather
-than as two projects.
+The two halves are now independent in cost and sequencing, which was not true of
+the first draft. Identifier extraction needs no model at all and can ship on its
+own; spelling correction hooks into the catalog project's stage-2 pass. They stay
+one project because they share a corpus pass and a review, not because they share
+a model call.
 
 `QueryAlias` is P5's, and this is the first thing that writes to it
 automatically; it was designed to be grown from the zero-result query list, and a
@@ -356,6 +441,14 @@ P10 task 3's gazetteer reads `Category` labels and is unaffected.
 
 ## 12. Open seams
 
+- **Identifier coverage tracks translation coverage.** 96 of 125 local iulaan
+  have no translated body, so they contribute only their scraped number until
+  translation catches up. The measurement to watch is identifiers per document
+  for translated versus untranslated slices.
+- **HTML leaks into the scraped body.** `col-md-12` appears as a body token,
+  which means the gazette scraper's markup stripping is incomplete. The `/`
+  filter sidesteps it here, but it is a data-quality defect in its own right and
+  worth a separate look.
 - **`kind` is a closed enum seeded from one document.** Expect additions once the
   full gazette corpus is ingested; the review queue for that is the count of
   `kind="other"` rows carrying a non-empty `label_raw`.
