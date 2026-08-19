@@ -67,6 +67,35 @@ def category_key(path: list[str]) -> str:
     return slugify("-".join(tail))[:64] or "unmapped"
 
 
+# Ancestor labels too generic to tell two nodes apart. 'Charger (Accessories)'
+# says nothing; 'Charger (Mobile Phones & Accessories)' says everything.
+GENERIC_ANCESTOR = {"accessories", "parts", "accessories & parts", "other",
+                    "others", "general", "general / other", "services",
+                    "other services", "other stuff", "misc", "miscellaneous"}
+
+
+def category_label(path: list[str], colliding: set[str]) -> str:
+    """The display label, qualified only when it would otherwise be ambiguous.
+
+    `category_leaf` is a bare string, and both P9's category-aware ranking and
+    spec 8.3's facet priority override group on it. Distinct keys are therefore
+    not enough: measured on the live corpus, 14 labels are shared by two nodes,
+    and the worst is `Charger` -- 400 phone chargers and 13 laptop chargers
+    landing in one ranking bucket, which is the exact defect this taxonomy
+    exists to fix.
+
+    Qualifying every label would be noise, so only a colliding leaf gets one.
+    """
+    leaf = path[-1].strip()
+    if leaf.lower() not in colliding or len(path) < 2:
+        return leaf
+    for segment in reversed(path[:-1]):
+        candidate = segment.strip()
+        if candidate and candidate.lower() not in GENERIC_ANCESTOR:
+            return f"{leaf} ({candidate})"[:128]
+    return leaf
+
+
 class Command(BaseCommand):
     help = "Propose Category nodes and SourceCategoryMap rows from the corpus."
 
@@ -98,10 +127,21 @@ class Command(BaseCommand):
             proposals.append((path, effective, infer_tier(effective),
                               category_key(effective), n))
 
+        # Which leaf labels two different nodes would both claim. Computed over
+        # the whole proposal set before any label is assigned, because a label is
+        # only ambiguous relative to its siblings in the finished tree.
+        leaf_owners: dict[str, set[str]] = {}
+        for _path, effective, _tier, key, _n in proposals:
+            leaf_owners.setdefault(effective[-1].strip().lower(), set()).add(key)
+        colliding = {leaf for leaf, keys in leaf_owners.items() if len(keys) > 1}
+
         for path, effective, tier, key, n in proposals:
             collapsed = " (collapsed to parent)" if effective != path else ""
+            label = category_label(effective, colliding)
+            qualified = "  <- disambiguated" if label != effective[-1].strip() else ""
             self.stdout.write(f"{n:6d}  {tier:9s}  {key:40s}  "
-                              f"{' > '.join(path)}{collapsed}")
+                              f"{' > '.join(path)}{collapsed}{qualified}")
+        self.stdout.write(f"{len(colliding)} ambiguous leaf labels qualified")
 
         if not opts["apply"]:
             self.stdout.write(self.style.WARNING(
@@ -125,8 +165,8 @@ class Command(BaseCommand):
                         nodes[pkey] = parent
                 node, _ = Category.objects.get_or_create(
                     key=key,
-                    defaults={"label_en": effective[-1], "tier": tier,
-                              "parent": parent})
+                    defaults={"label_en": category_label(effective, colliding),
+                              "tier": tier, "parent": parent})
                 nodes[key] = node
                 SourceCategoryMap.objects.update_or_create(
                     source=source, path_key=path_key(source, path),

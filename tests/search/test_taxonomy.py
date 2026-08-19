@@ -129,3 +129,42 @@ def test_junk_leaves_are_recognised():
         assert JUNK_LEAF.match(leaf.strip()), leaf
     for leaf in ("Mobile Phones", "Charger", "Other Accessories"):
         assert not JUNK_LEAF.match(leaf.strip()), leaf
+
+
+# --------------------------------------------------------------------------
+# category_label: distinct keys are not enough, because category_leaf is a bare
+# string that P9's ranking and spec 8.3's facet override both group on.
+# --------------------------------------------------------------------------
+
+def test_a_unique_leaf_label_is_left_alone():
+    from search.management.commands.seed_taxonomy import category_label
+    path = ["For Sale", "Mobile Phones & Accessories", "Mobile Phones"]
+    assert category_label(path, colliding=set()) == "Mobile Phones"
+
+
+def test_a_colliding_leaf_is_qualified_by_its_nearest_useful_ancestor():
+    """Measured: 400 phone chargers and 13 laptop chargers shared one bucket."""
+    from search.management.commands.seed_taxonomy import category_label
+    phone = ["For Sale", "Mobile Phones & Accessories", "Accessories", "Charger"]
+    laptop = ["For Sale", "Computer, Tablets & Networking", "Laptop Accessories",
+              "Charger"]
+    colliding = {"charger"}
+    assert category_label(phone, colliding) == "Charger (Mobile Phones & Accessories)"
+    assert category_label(laptop, colliding) == "Charger (Laptop Accessories)"
+    assert category_label(phone, colliding) != category_label(laptop, colliding)
+
+
+def test_a_generic_ancestor_is_skipped_when_qualifying():
+    """'Charger (Accessories)' would be ambiguous with every other Accessories
+    node, so the qualifier climbs past generic segments."""
+    from search.management.commands.seed_taxonomy import category_label
+    path = ["For Sale", "Mobile Phones & Accessories", "Accessories", "Charger"]
+    assert "(Accessories)" not in category_label(path, {"charger"})
+
+
+def test_qualifying_never_produces_an_empty_or_oversized_label():
+    from search.management.commands.seed_taxonomy import category_label
+    label = category_label(["Other", "Charger"], {"charger"})
+    assert label == "Charger"           # no useful ancestor, so leave it
+    long_path = ["For Sale", "x" * 200, "Charger"]
+    assert len(category_label(long_path, {"charger"})) <= 128

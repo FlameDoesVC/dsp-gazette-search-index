@@ -29,6 +29,15 @@
 - **The model never invents a category.** It picks an existing `Category.key` or returns nothing. Same rule as never inventing a digit. Spec section 5.
 - **FKs to `SearchDocument` need `db_constraint=False`**, and links store `(source, source_key)` rather than a document FK so they survive a reindex. It is LIST-partitioned. Spec 12.2, spec section 6.2.
 - **Streaming uses `.iterator(chunk_size=500)` on the `settings.STREAM_DB_ALIAS` alias.**
+- **Never assign a model INSTANCE to a FK on an object streamed over `STREAM_DB_ALIAS`. Assign the `_id`.** A `Category` resolved over `default` and a `SearchDocument` streamed over `direct` are different aliases, so `doc.category = category` raises
+  `ValueError: the current database router prevents this relation`. Write
+  `doc.category_id = category.id` instead, and pass
+  `.using(settings.STREAM_DB_ALIAS)` to the matching `bulk_update`. **No normal
+  test catches this**: `conftest.py` points `STREAM_DB_ALIAS` at `default`, which
+  makes both objects same-alias. It cost a live command run to find in task 2.
+  Tasks 5, 6 and 9 all stream and assign FKs, so it applies to `resolve.py`,
+  `profile.py` and every backfill command. The one test that does reach it needs
+  `@pytest.mark.django_db(transaction=True, databases=["default", "direct"])`.
 - **Nothing time-dependent goes in `card`.** Raw values only.
 - Version control is **jj**, not git.
 
@@ -345,9 +354,37 @@ from __future__ import annotations
 
 import hashlib
 
+from django.db.models.signals import post_delete, post_save
+
 from search.models import Category, SourceCategoryMap
 
 TIERS = ("family", "primary", "accessory", "part", "service")
+
+# (source, path_key) -> Category | None.
+#
+# `map_path` is called once per document from search/indexing.py::_row, and the
+# question it asks has only ~306 distinct answers, so the uncached version issues
+# one query per row: 20,445 on today's corpus and 5M at the size spec 12 projects.
+# Same lifetime reasoning as _OVERLAY_CACHE in indexing.py, except this one is
+# invalidated by signals, because a taxonomy edit in the admin must be visible to
+# the web process without a restart and the tests build their taxonomy row by row.
+_CACHE: dict[tuple[str, str], Category | None] = {}
+
+
+def clear_cache(*args, **kwargs) -> None:
+    """Drop the resolution cache. Connected to Category and SourceCategoryMap
+    saves and deletes below; also safe to call directly."""
+    _CACHE.clear()
+
+
+post_save.connect(clear_cache, sender=Category,
+                  dispatch_uid="taxonomy_cache_category_save")
+post_delete.connect(clear_cache, sender=Category,
+                    dispatch_uid="taxonomy_cache_category_delete")
+post_save.connect(clear_cache, sender=SourceCategoryMap,
+                  dispatch_uid="taxonomy_cache_map_save")
+post_delete.connect(clear_cache, sender=SourceCategoryMap,
+                    dispatch_uid="taxonomy_cache_map_delete")
 
 
 def path_key(source: str, path: list[str]) -> str:
@@ -362,16 +399,26 @@ def map_path(source: str, path: list[str]) -> Category | None:
     None covers three different situations on purpose -- no row, a reviewed row
     with no category, and an inactive category -- because every one of them
     means the same thing downstream: this document has no canonical category.
+
+    A miss is cached as None too. An unmapped path is asked about once per
+    document just like a mapped one, and there are only so many of them.
     """
     if not path:
         return None
+
+    cache_key = (source, path_key(source, path))
+    if cache_key in _CACHE:
+        return _CACHE[cache_key]
+
     row = (SourceCategoryMap.objects
-           .filter(source=source, path_key=path_key(source, path))
+           .filter(source=source, path_key=cache_key[1])
            .select_related("category")
            .first())
     if row is None or row.category is None or not row.category.is_active:
-        return None
-    return row.category
+        _CACHE[cache_key] = None
+    else:
+        _CACHE[cache_key] = row.category
+    return _CACHE[cache_key]
 
 
 def family_of(category: Category) -> Category:
@@ -471,6 +518,36 @@ def category_key(path: list[str]) -> str:
     return slugify("-".join(tail))[:64] or "unmapped"
 
 
+# Ancestor labels too generic to tell two nodes apart. 'Charger (Accessories)'
+# says nothing; 'Charger (Mobile Phones & Accessories)' says everything.
+GENERIC_ANCESTOR = {"accessories", "parts", "accessories & parts", "other",
+                    "others", "general", "general / other", "services",
+                    "other services", "other stuff", "misc", "miscellaneous"}
+
+
+def category_label(path: list[str], colliding: set[str]) -> str:
+    """The display label, qualified only when it would otherwise be ambiguous.
+
+    Distinct KEYS are not sufficient, and this is the trap. `category_leaf` is a
+    bare string, and both P9's category-aware ranking and spec 8.3's facet
+    priority override group on it -- so two nodes with different keys and the
+    same label still share one bucket. Measured on the live corpus: 14 labels
+    were shared by two nodes, the worst being `Charger`, with 400 phone chargers
+    and 13 laptop chargers landing together, which is the exact defect this
+    taxonomy exists to fix.
+
+    Qualifying every label would be noise, so only a colliding leaf gets one.
+    """
+    leaf = path[-1].strip()
+    if leaf.lower() not in colliding or len(path) < 2:
+        return leaf
+    for segment in reversed(path[:-1]):
+        candidate = segment.strip()
+        if candidate and candidate.lower() not in GENERIC_ANCESTOR:
+            return f"{leaf} ({candidate})"[:128]
+    return leaf
+
+
 class Command(BaseCommand):
     help = "Propose Category nodes and SourceCategoryMap rows from the corpus."
 
@@ -502,10 +579,21 @@ class Command(BaseCommand):
             proposals.append((path, effective, infer_tier(effective),
                               category_key(effective), n))
 
+        # Which leaf labels two different nodes would both claim. Computed over
+        # the whole proposal set before any label is assigned, because a label is
+        # only ambiguous relative to its siblings in the finished tree.
+        leaf_owners: dict[str, set[str]] = {}
+        for _path, effective, _tier, key, _n in proposals:
+            leaf_owners.setdefault(effective[-1].strip().lower(), set()).add(key)
+        colliding = {leaf for leaf, keys in leaf_owners.items() if len(keys) > 1}
+
         for path, effective, tier, key, n in proposals:
             collapsed = " (collapsed to parent)" if effective != path else ""
+            label = category_label(effective, colliding)
+            qualified = "  <- disambiguated" if label != effective[-1].strip() else ""
             self.stdout.write(f"{n:6d}  {tier:9s}  {key:40s}  "
-                              f"{' > '.join(path)}{collapsed}")
+                              f"{' > '.join(path)}{collapsed}{qualified}")
+        self.stdout.write(f"{len(colliding)} ambiguous leaf labels qualified")
 
         if not opts["apply"]:
             self.stdout.write(self.style.WARNING(
@@ -529,8 +617,8 @@ class Command(BaseCommand):
                         nodes[pkey] = parent
                 node, _ = Category.objects.get_or_create(
                     key=key,
-                    defaults={"label_en": effective[-1], "tier": tier,
-                              "parent": parent})
+                    defaults={"label_en": category_label(effective, colliding),
+                              "tier": tier, "parent": parent})
                 nodes[key] = node
                 SourceCategoryMap.objects.update_or_create(
                     source=source, path_key=path_key(source, path),
@@ -804,20 +892,26 @@ class Command(BaseCommand):
             leaf = category.label_en if category else (path[-1] if path else "")
             if category is None:
                 unmapped += 1
-            if doc.category_id == (category.id if category else None) \
-                    and doc.category_leaf == leaf:
+            category_id = category.id if category else None
+            if doc.category_id == category_id and doc.category_leaf == leaf:
                 continue
-            doc.category = category
+            # category_id, NOT category: the document was streamed over the
+            # `direct` alias and map_path resolved the Category over `default`,
+            # so assigning the instance trips Django's allow_relation check and
+            # raises ValueError. Tests never see it -- conftest points
+            # STREAM_DB_ALIAS at `default`, which makes both objects same-alias.
+            doc.category_id = category_id
             doc.category_leaf = leaf
             batch.append(doc)
             changed += 1
             if len(batch) >= 500 and not opts["dry_run"]:
-                SearchDocument.objects.bulk_update(
+                SearchDocument.objects.using(settings.STREAM_DB_ALIAS).bulk_update(
                     batch, ["category", "category_leaf"])
                 batch.clear()
 
         if batch and not opts["dry_run"]:
-            SearchDocument.objects.bulk_update(batch, ["category", "category_leaf"])
+            SearchDocument.objects.using(settings.STREAM_DB_ALIAS).bulk_update(
+                batch, ["category", "category_leaf"])
 
         self.stdout.write(self.style.SUCCESS(
             f"{changed} updated, {unmapped} still unmapped"))
@@ -832,6 +926,21 @@ python manage.py migrate
 pytest tests/search/test_category_mapping.py tests/search/test_taxonomy.py -v
 ```
 Expected: PASS.
+
+- [ ] **Step 6b: Pin the resolution cache and its invalidation**
+
+`map_path` runs once per document in `_row`. Append to
+`tests/search/test_category_mapping.py` tests asserting that:
+
+- 50 repeat lookups of one path issue **zero** queries after the first
+  (`CaptureQueriesContext`), and an unmapped path is cached as `None` the same way
+- saving a `Category` makes the new `label_en` visible immediately
+- deactivating a `Category` makes `map_path` return `None` immediately
+- repointing a `SourceCategoryMap` row returns the new node immediately
+
+The last three are the ones that matter. A cache without them turns every admin
+click into a change that only takes effect after a restart, which is worse than
+the queries it saves.
 
 - [ ] **Step 7: Run against the real corpus and record coverage**
 

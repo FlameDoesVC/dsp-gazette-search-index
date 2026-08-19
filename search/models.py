@@ -69,6 +69,15 @@ class SearchDocument(models.Model):
     # because ranking and faceting both aggregate it per request and a JSONB
     # array element is avoidable work. Spec 4.4.
     category_leaf = models.CharField(max_length=128, blank=True, db_index=True)
+    # Partitioned table, so no FK constraint (spec 12.2). Null is normal: most
+    # gazette documents have no category, and search must not require one.
+    category = models.ForeignKey("search.Category", null=True, blank=True,
+                                 on_delete=models.SET_NULL, db_constraint=False,
+                                 related_name="documents")
+    # The primary advertiser phone, extracted deterministically (task 3). A
+    # column rather than a card key because one number covers 1,680 listings,
+    # so "same advertiser" has to be groupable in SQL.
+    contact_phone = models.CharField(max_length=16, blank=True, db_index=True)
 
     # Set by `dedupe_listings`, not by the adapter. A separate flag rather than
     # reusing `is_active`: that one is derived from the source and would be

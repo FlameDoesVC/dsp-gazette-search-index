@@ -52,6 +52,7 @@ _UPDATE_FIELDS = [
     "published_at", "expires_at", "is_active",
     "attrs", "card", "thumbnails", "quality", "content_hash",
     "stale_marked_at", "category_leaf", "dedupe_key",
+    "category", "contact_phone",
 ]
 
 
@@ -62,8 +63,13 @@ def _row(draft: DocumentDraft) -> SearchDocument:
     title_en, title_dv = route_bilingual(draft.title_en, draft.title_dv)
     summary_en, summary_dv = route_bilingual(draft.summary_en, draft.summary_dv)
     # The leaf category drives ranking and faceting (P9 task 4).
+    # The canonical taxonomy decides the bucket, not the source's own path.
+    # Measured: 9 iBay leaf labels are ambiguous across families, and both P9's
+    # category-aware ranking and spec 8.3's facet override key on category_leaf.
+    from search.taxonomy import map_path
     path = draft.attrs.get("category_path") or []
-    category_leaf = str(path[-1]) if path else ""
+    category = map_path(draft.source, [str(p) for p in path])
+    category_leaf = category.label_en if category else (str(path[-1]) if path else "")
     card = dict(draft.card or {})
     if category_leaf and not card.get("category_leaf"):
         card["category_leaf"] = category_leaf
@@ -110,6 +116,7 @@ def _row(draft: DocumentDraft) -> SearchDocument:
         content_hash=draft.content_hash,
         stale_marked_at=None,   # a successful pass clears the work ticket
         category_leaf=category_leaf,
+        category=category,
         dedupe_key=dedupe_key_value,
     )
 
