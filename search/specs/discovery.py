@@ -251,4 +251,17 @@ def _build(cur, cte, params, key: SpecKey, st: dict, total: int) -> dict | None:
 
     entry["_key"] = key
     entry["_score"] = score(st["coverage"], entry["_entropy"])
+    # A facet built partly on model knowledge says so, so the frontend can
+    # disclose it on the result set rather than only on the detail page
+    # (catalog spec section 9).
+    entry["has_inferred"] = _has_inferred(cur, cte, params, key)
     return entry
+
+
+def _has_inferred(cur, cte, params, key: SpecKey) -> bool:
+    cur.execute(
+        f"{cte} SELECT EXISTS (SELECT 1 FROM search_documentspec s "
+        f"JOIN candidates c ON c.id = s.document_id "
+        f"WHERE s.key_id = %(spec_key_id)s AND s.provenance = 'inferred')",
+        {**params, "spec_key_id": key.id})
+    return bool(cur.fetchone()[0])

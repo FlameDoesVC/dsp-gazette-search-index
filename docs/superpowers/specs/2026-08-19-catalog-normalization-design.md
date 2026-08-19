@@ -467,7 +467,10 @@ field being wrong.
 GET  /api/documents/{id}            gains entity_id, and each spec item gains
                                     provenance
 GET  /api/entities/{entity_id}      the profile: identity, category, fields with
-                                    provenance and support_count, listing_count
+                                    provenance and support_count, listing_count,
+                                    and `sources` -- the listing urls the profile
+                                    was built from, capped, so an inferred field
+                                    can be checked against the ads behind it
 POST /api/entities/{entity_id}/propose
        {key_raw, value_num?, value_text?, unit?}   all values empty means
        "this field is wrong"

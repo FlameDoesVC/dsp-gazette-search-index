@@ -48,8 +48,12 @@ def test_detail_404s_for_a_missing_id(api, docs):
 def test_detail_carries_the_full_spec_table_including_non_facetable_keys(api, docs):
     d = SearchDocument.objects.get(source_key="1")
     body = api.get(f"/api/v1/documents/{d.id}").json()
+    # `provenance` is part of the spec item as of the catalog entity layer: a
+    # filterable value that came from model knowledge has to say so. Empty here
+    # because this fixture's row predates any entity.
     assert body["specs"] == [{"key_raw": "storage", "value_num": 128,
-                              "value_text": "", "unit": "GB"}]
+                              "value_text": "", "unit": "GB",
+                              "provenance": ""}]
 
 
 @pytest.mark.django_db

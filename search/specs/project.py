@@ -46,7 +46,8 @@ def specs_for_document(doc: SearchDocument, registry=None) -> list[dict]:
     rows: list[dict] = []
     seen: set[tuple[str, float | None, str]] = set()
 
-    def push(key_raw, *, value_num=None, value_text="", unit=""):
+    def push(key_raw, *, value_num=None, value_text="", unit="",
+             provenance=""):
         key_raw = slugify_key(key_raw)
         if not key_raw or key_raw in SKIP_KEYS:
             return
@@ -61,6 +62,7 @@ def specs_for_document(doc: SearchDocument, registry=None) -> list[dict]:
             "value_num": value_num,
             "value_text": value_text,
             "unit": unit,
+            "provenance": provenance,
         })
 
     # 1. the deterministic extractor over whatever text we have
@@ -91,6 +93,28 @@ def specs_for_document(doc: SearchDocument, registry=None) -> list[dict]:
                   else [v[:128] for v in _split_plain(str(raw_value))])
         for v in values:
             push(key_raw, value_text=v)
+
+    # 4. winning entity fields (catalog spec section 11). Inferred values are
+    # filterable, which is the point, but only above the identity-confidence
+    # floor: a filter built on a guessed identity narrows to the wrong thing.
+    entity_id = doc.attrs.get("entity_id")
+    if entity_id:
+        from catalog.merge import winning_fields
+        from catalog.models import Entity
+
+        entity = Entity.objects.filter(id=entity_id).first()
+        if entity is not None:
+            floor = settings.CATALOG_INFERRED_MIN_CONFIDENCE
+            for f in winning_fields(entity):
+                if (f.provenance == "inferred"
+                        and entity.identity_confidence < floor):
+                    continue
+                if f.value_num is not None:
+                    push(f.key_raw, value_num=f.value_num, unit=f.unit,
+                         provenance=f.provenance)
+                elif f.value_text:
+                    push(f.key_raw, value_text=f.value_text,
+                         provenance=f.provenance)
 
     return rows
 

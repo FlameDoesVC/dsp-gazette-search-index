@@ -3675,9 +3675,15 @@ def test_winning_entity_specs_reach_documentspec_with_provenance(linked):
     EntityField.objects.create(entity=linked, key_raw="storage_gb",
                                value_num=128, unit="GB", provenance="inferred",
                                is_winner=True)
+    # The title must NOT contain 128GB. The unit extractor is input 1 of
+    # specs_for_document and the entity is input 4, and push() dedupes on
+    # (key_raw, value_num, value_text) with first-write-wins -- so a value the
+    # title already states is claimed by the extractor, which carries no
+    # provenance because it is grounded by construction. Asserting 'inferred' on
+    # such a value tests the dedupe, not the projection.
     doc = SearchDocument.objects.create(
         source="ibay", source_key="1", doc_type="shopping", url="https://x/1",
-        title_en="SAMSUNG A15 128GB", attrs={"entity_id": linked.id})
+        title_en="SAMSUNG A15 smartphone", attrs={"entity_id": linked.id})
     sync_document_specs(doc)
     row = DocumentSpec.objects.get(document_id=doc.id, key_raw="storage_gb")
     assert row.value_num == 128
@@ -4007,6 +4013,16 @@ and include provenance in the spec items:
     ]
 ```
 
+- [ ] **Step 10b: Carry the API contract change into the existing test**
+
+Step 10 adds `provenance` to each spec item in `/documents/{id}`. That is a
+deliberate contract change, and one existing test asserts the old exact dict:
+`tests/api/test_documents.py::test_detail_carries_the_full_spec_table_including_non_facetable_keys`.
+Add `"provenance": ""` to its expected dict. This is the one pre-existing test
+this task is allowed to touch, and only because the response shape changed by
+design; every other failure in `tests/api/` or `tests/search/specs/` is a real
+regression.
+
 - [ ] **Step 11: Migrate and run the whole suite**
 
 Run:
@@ -4320,6 +4336,24 @@ def test_get_entity_returns_the_profile_with_provenance(api, entity):
 
 
 @pytest.mark.django_db
+def test_get_entity_returns_the_listings_behind_the_profile(api, entity):
+    """A profile with no traceable evidence is not inspectable, and an inferred
+    field is exactly what a reader needs to check against the source ads."""
+    from catalog.models import EntityLink
+    from search.models import SearchDocument
+
+    SearchDocument.objects.create(
+        source="ibay", source_key="9001", doc_type="shopping",
+        url="https://ibay.com.mv/thing-o9001.html", title_en="A thing")
+    EntityLink.objects.create(entity=entity, source="ibay", source_key="9001",
+                              method="identity_match")
+
+    body = api.get(f"/api/v1/entities/{entity.id}").json()
+    assert body["sources"][0]["url"] == "https://ibay.com.mv/thing-o9001.html"
+    assert body["sources"][0]["source_key"] == "9001"
+
+
+@pytest.mark.django_db
 def test_get_a_missing_entity_is_404(api, db):
     assert api.get("/api/v1/entities/999999").status_code == 404
 
@@ -4401,6 +4435,21 @@ class EntityFieldOut(Schema):
     support_count: int
 
 
+class EntitySourceOut(Schema):
+    """One listing an entity stands for. This is the profile's evidence.
+
+    Verified on the live corpus: all 11,886 links resolve to a document with a
+    non-empty url, so a profile can always be traced back to the individual ads
+    behind it -- including the 453-listing entity one advertiser produced.
+    """
+
+    document_id: int
+    source: str
+    source_key: str
+    url: str
+    title: str
+
+
 class EntityOut(Schema):
     id: int
     kind: str
@@ -4416,6 +4465,9 @@ class EntityOut(Schema):
     profile_tier: str = ""
     listing_count: int
     fields: list[EntityFieldOut] = []
+    # Capped, because one entity reaches 453 listings and a detail response is
+    # not a paginated feed. listing_count carries the true total.
+    sources: list[EntitySourceOut] = []
 
 
 class ProposalIn(Schema):
@@ -4439,12 +4491,50 @@ from api.logging import session_hash
 from api.ratelimit import proposal_quota_exceeded
 from api.schemas import AcceptedOut, EntityOut, ProposalIn
 from catalog.merge import PROVENANCE_ORDER, winning_fields
-from catalog.models import Entity
+from catalog.models import Entity, EntityLink
 from catalog.proposals import evaluate_field, propose
 
 router = Router()
 
 MAX_KEY = 64
+# One entity in the corpus links 453 listings. The detail response carries the
+# evidence, not the whole feed.
+MAX_SOURCES = 25
+
+
+def _sources_for(entity) -> list[dict]:
+    """The listings behind a profile, so an inferred field can be checked.
+
+    Without this an entity renders as `listing_count: 453` with no way to verify
+    any of it, while the design leans on every inference being visible. It is
+    also what makes a correction meaningful: you look at the ads before claiming
+    a field is wrong.
+
+    Two queries, not one per link. EntityLink stores (source, source_key)
+    because SearchDocument is partitioned and links must survive a reindex
+    (spec section 6.2), so there is no FK to follow.
+    """
+    from search.models import SearchDocument
+
+    pairs = list(EntityLink.objects.filter(entity=entity)
+                 .values_list("source", "source_key")[:MAX_SOURCES])
+    if not pairs:
+        return []
+    by_pair = {
+        (d.source, d.source_key): d
+        for d in SearchDocument.objects
+        .filter(source__in={s for s, _k in pairs},
+                source_key__in=[k for _s, k in pairs])
+        .only("id", "source", "source_key", "url", "title_en")
+    }
+    out = []
+    for source, source_key in pairs:
+        doc = by_pair.get((source, source_key))
+        if doc is not None:
+            out.append({"document_id": doc.id, "source": doc.source,
+                        "source_key": doc.source_key, "url": doc.url,
+                        "title": doc.title_en})
+    return out
 
 
 @router.get("/entities/{int:entity_id}", response=EntityOut)
@@ -4471,6 +4561,7 @@ def entity_detail(request, entity_id: int):
         "profile_tier": (max(tiers, key=PROVENANCE_ORDER.index)
                          if tiers else ""),
         "listing_count": entity.listing_count,
+        "sources": _sources_for(entity),
         "fields": [
             {"key_raw": f.key_raw, "value_num": f.value_num,
              "value_text": f.value_text, "unit": f.unit,

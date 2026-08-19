@@ -304,6 +304,9 @@ REPORT_RATE_WINDOW = int(os.getenv("REPORT_RATE_WINDOW", "3600"))
 # only these dotted paths; it never imports `enrich`.
 SEARCH_DRAFT_OVERLAYS = [
     "enrich.overlay.apply_enrichment",
+    # After enrichment: an entity profile is built from every listing of the
+    # thing and must win over a single listing's extraction.
+    "catalog.overlay.apply_entity",
 ]
 # --- catalog identity (see catalog/identity.py::identity_stopwords) ---
 # A model token appearing in this many For Sale listings or more names a

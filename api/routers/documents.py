@@ -27,7 +27,8 @@ def detail(request, doc_id: int):
 
     specs = [
         {"key_raw": s.get("key_raw", ""), "value_num": s.get("value_num"),
-         "value_text": s.get("value_text", ""), "unit": s.get("unit", "")}
+         "value_text": s.get("value_text", ""), "unit": s.get("unit", ""),
+         "provenance": s.get("provenance", "")}
         for s in (doc.attrs.get("specs") or [])
     ]
 
@@ -52,6 +53,8 @@ def detail(request, doc_id: int):
         "specs": specs,
         "card": annotate_time(doc.card, doc.doc_type),
         "thumbnails": doc.thumbnails,
+        "entity_id": doc.attrs.get("entity_id"),
+        "profile_tier": doc.attrs.get("profile_tier", ""),
     }
 
 

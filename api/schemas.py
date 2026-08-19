@@ -64,6 +64,7 @@ class FacetOut(Schema):
     max: float | None = None
     histogram: list[dict] = []
     count_true: int | None = None
+    has_inferred: bool = False
 
 
 class ResultOut(Schema):
@@ -76,6 +77,7 @@ class ResultOut(Schema):
     translated: bool
     card: dict[str, Any]
     score: float
+    profile_tier: str = ""
 
 
 class QueryEchoOut(Schema):

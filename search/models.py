@@ -298,6 +298,10 @@ class DocumentSpec(models.Model):
     value_num = models.FloatField(null=True, blank=True)
     value_text = models.CharField(max_length=128, blank=True)
     unit = models.CharField(max_length=16, blank=True)
+    # Where the value came from (catalog spec section 9). Empty for rows
+    # written before the entity layer and for the deterministic extractor,
+    # which is grounded by construction.
+    provenance = models.CharField(max_length=16, blank=True, db_index=True)
 
     class Meta:
         constraints = [
