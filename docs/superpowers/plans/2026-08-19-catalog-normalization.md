@@ -1548,6 +1548,37 @@ from catalog.models import Brand
 from search.models import DocumentSpec
 
 
+# (canonical name, aliases). Recovered-listing counts from the 2026-08-19 miss
+# analysis are in the comment beside each.
+CURATED: list[tuple[str, tuple[str, ...]]] = [
+    ("JBL", ()),                       # 131
+    ("DJI", ()),                       # 45
+    ("Marshall", ()),                  # 38
+    ("Nintendo", ("switch",)),         # 35
+    ("Sharp", ()),                     # 34
+    ("Philips", ()),                   # 29
+    ("Midea", ()),                     # 21
+    ("Geepas", ()),                    # 18
+    ("Boss", ()),                      # 17
+    ("Amazfit", ("amazefit",)),        # 17
+    ("Anker", ()),                     # 16
+]
+
+
+def _split_alias(raw: str) -> tuple[str, list[str]]:
+    """'Apple (iPhone)' -> ('Apple', ['iPhone', 'Apple (iPhone)']).
+
+    Both forms are kept: the contents are what a title actually says, and the
+    raw string is what the scraped field says, so matching either is correct.
+    """
+    if "(" not in raw:
+        return raw, []
+    base = raw.split("(")[0].strip() or raw
+    inner = raw[raw.index("(") + 1:].split(")")[0].strip()
+    aliases = [a for a in (inner, raw) if a and a.lower() != base.lower()]
+    return base, aliases
+
+
 class Command(BaseCommand):
     help = "Seed the Brand vocabulary from DocumentSpec brand values."
 
@@ -1561,15 +1592,36 @@ class Command(BaseCommand):
             name = row["value_text"].strip()
             if not name or len(name) > 64:
                 continue
-            # 'Apple (iPhone)' and 'Apple' are the same brand; the parenthetical
-            # becomes an alias rather than a second brand.
-            base = name.split("(")[0].strip() or name
+            # 'Apple (iPhone)' and 'Apple' are the same brand, so the
+            # parenthetical becomes an alias rather than a second brand -- and
+            # the alias is its CONTENTS, 'iPhone', not the whole raw string.
+            # Storing 'Apple (iPhone)' verbatim matches nothing: measured, 60
+            # For Sale titles begin with the word iPhone.
+            base, aliases = _split_alias(name)
             brand, was_created = Brand.objects.get_or_create(name=base)
             created += int(was_created)
-            if base != name and name not in (brand.aliases or []):
-                brand.aliases = [*(brand.aliases or []), name]
+            new = [a for a in aliases if a and a not in (brand.aliases or [])]
+            if new:
+                brand.aliases = [*(brand.aliases or []), *new]
                 brand.save(update_fields=["aliases"])
             self.stdout.write(f"{row['n']:5d}  {base}")
+
+        # Brands the corpus uses that DocumentSpec cannot supply, because the
+        # scraped `Brand` field is only populated on 2,313 of 7,105 For Sale
+        # listings. Hand-verified from the most frequent leading word among the
+        # listings that resolved to no identity at all. Frequency alone is not
+        # the test -- 'SMART', 'USB', 'HOTEL' and 'UNIVERSAL' rank just as high
+        # and are not brands.
+        for name, aliases in CURATED:
+            brand, was_created = Brand.objects.get_or_create(
+                name=name, defaults={"aliases": list(aliases)})
+            created += int(was_created)
+            if not was_created:
+                new = [a for a in aliases if a not in (brand.aliases or [])]
+                if new:
+                    brand.aliases = [*(brand.aliases or []), *new]
+                    brand.save(update_fields=["aliases"])
+
         self.stdout.write(self.style.SUCCESS(
             f"{created} brands created, {Brand.objects.count()} total"))
 ```
@@ -1610,9 +1662,26 @@ for d in qs.only('title_en','attrs').iterator(chunk_size=500):
         miss += 1
 print(f'{miss}/{total} = {100*miss/total:.1f}% no usable identity')"
 ```
-Expected: a miss rate in the 15-30% band the spec predicted. If it exceeds 35%,
-stop and grow the brand vocabulary before task 5 - resolution quality is bounded
-by this number and no later task can recover it.
+Measured 2026-08-19 over the 7,105 For Sale listings:
+
+| identity found | listings | share | confidence |
+|---|---|---|---|
+| brand + model tokens | 2,016 | 28.4% | 0.9 |
+| brand only | 1,231 | 17.3% | 0.5 |
+| model tokens only | 2,745 | 38.6% | 0.5 |
+| **neither, so no entity** | **1,113** | **15.7%** | - |
+
+If it exceeds 35%, stop and grow the brand vocabulary before task 5 -
+resolution quality is bounded by this number and no later task can recover it.
+Before the `_split_alias` fix and the curated brands the miss rate was 22.3%,
+so those two changes are worth 6.6 points on their own.
+
+**Carry this into task 5:** only 28.4% of For Sale listings reach confidence
+0.9, and `CATALOG_INFERRED_MIN_CONFIDENCE` defaults to 0.7, so on these numbers
+the inferred specs of the other 55.9% never enter `DocumentSpec`. Either the
+confidence rule in `resolve_document` or that floor needs to account for a
+listing whose model number is unambiguous but whose brand is simply not in the
+vocabulary yet.
 
 - [ ] **Step 9: Commit**
 

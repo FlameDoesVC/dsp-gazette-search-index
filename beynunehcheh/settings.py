@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'ibay',
     'search',
     'enrich',
+    'catalog',
     'api',
 ]
 
