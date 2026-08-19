@@ -15,7 +15,8 @@ Spec: `docs/superpowers/specs/2026-08-17-search-engine-design.md`
 | `2026-08-18-search-p7-facets.md` | P7 Dynamic facets | written |
 | `2026-08-18-search-p8-hardening.md` | P8 Hardening | written |
 | `2026-08-18-search-p9-remediation.md` | P9 Remediation | **written, pending** |
-| `2026-08-18-search-p10-understanding.md` | P10 Query understanding | **written, pending** |
+| `2026-08-18-search-p10-understanding.md` | P10 Query understanding | **written, tasks 1-2 absorbed by Catalog** |
+| `2026-08-19-catalog-normalization.md` | Catalog normalization | **tasks 1-8 landed, 9 in progress** |
 
 ## The measurements each phase produces
 
@@ -34,6 +35,7 @@ things, and several of them swing costs five-fold.
 | P6 — bundle size, Lighthouse, RTL checklist | `measurements/2026-08-p6-frontend.md` | Thaana font subsetting |
 | P7 — discovery cost, rejection reasons | `measurements/2026-08-p7-facets.md` | facet thresholds, Meilisearch re-entry |
 | P8 — the v2 re-entry table | `measurements/2026-08-p8-hardening.md` | pgvector (16.1), learning to rank (16.2) |
+| Catalog — entity counts, tier shares, resolution precision | `measurements/2026-08-catalog.md` | the inferred confidence floor, brand vocabulary growth, whether products are worth profiling |
 
 **P8 must not start until the API has served real traffic for at least a week.**
 Four of its six tasks read `QueryLog`, and tuning against an empty table
