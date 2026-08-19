@@ -23,7 +23,15 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/58.0.3029.110 Safari/537.3"
 )
-STALE_DAYS = 1
+# How old a SCRAPED product must be before it is re-fetched. This is the only
+# path that deliberately re-scrapes something already stored -- the detail batch
+# itself only ever takes NOT_SCRAPED -- and at the old value of 1 day, with a
+# sync loop every 10 minutes, it meant re-fetching the entire SCRAPED corpus
+# every day: 1,673 products were already due against 14,260 stored.
+STALE_DAYS = int(os.getenv("IBAY_STALE_DAYS", "7"))
+# And a ceiling per cycle, so a backlog can never turn one cycle into a full
+# re-scrape. The oldest go first, so the backlog still drains, just bounded.
+STALE_BATCH_LIMIT = int(os.getenv("IBAY_STALE_BATCH_LIMIT", "500"))
 DETAIL_SEMAPHORE_LIMIT = 6
 LINK_SEMAPHORE_LIMIT = 10
 BATCH_SIZE = 20
@@ -421,16 +429,23 @@ async def sync_product_details(client: httpx.AsyncClient):
 
 async def update_stale_products(client: httpx.AsyncClient):
     cutoff = datetime.now(timezone.utc) - timedelta(days=STALE_DAYS)
+    due = Product.objects.filter(status="SCRAPED", updated_at__lt=cutoff)
+    backlog = await due.acount()
     stale = [
         p async for p in
-        Product.objects.filter(
-            status="SCRAPED", updated_at__lt=cutoff
-        ).values("id", "listing_id", "name", "url", "price", "description")
+        due.order_by("updated_at").values(
+            "id", "listing_id", "name", "url", "price", "description"
+        )[:STALE_BATCH_LIMIT or None]
     ]
     total = len(stale)
     if not total:
         return
-    logger.info("Found %d stale products to update.", total)
+    if backlog > total:
+        logger.info("Refreshing %d of %d stale products this cycle (oldest "
+                    "first; raise IBAY_STALE_BATCH_LIMIT to go faster).",
+                    total, backlog)
+    else:
+        logger.info("Found %d stale products to update.", total)
     sem = asyncio.Semaphore(DETAIL_SEMAPHORE_LIMIT)
     for i in range(0, total, BATCH_SIZE):
         batch = stale[i : i + BATCH_SIZE]

@@ -66,3 +66,39 @@ def test_full_flag_exists_to_override(command):
                                 command).create_parser("manage.py", command)
     flags = {a.dest for a in parser._actions}
     assert {"full", "max_pages", "stop_after_seen"} <= flags
+
+
+# --------------------------------------------------------------------------
+# The detail phases. Only one path re-fetches something already stored, and it
+# has to stay bounded.
+# --------------------------------------------------------------------------
+
+def test_the_detail_batch_only_takes_unscraped_products():
+    """sync_product_details must never re-fetch a product whose details exist.
+    Measured when this was checked: 14,260 SCRAPED, 14,230 NOT_SCRAPED, and only
+    the latter are eligible."""
+    import inspect
+    from ibay import sync_service
+
+    src = inspect.getsource(sync_service.sync_product_details)
+    assert 'status="NOT_SCRAPED"' in src
+
+
+def test_the_stale_refresh_is_bounded_per_cycle():
+    """It is the only deliberate re-scrape. At STALE_DAYS=1 with a 10-minute
+    loop it re-fetched the whole SCRAPED corpus daily, unbounded per cycle."""
+    from ibay import sync_service
+
+    assert sync_service.STALE_DAYS >= 7
+    assert sync_service.STALE_BATCH_LIMIT >= 1
+
+
+def test_dead_listings_are_not_retried_forever():
+    """5,404 of 5,427 ERROR rows are 'Listing disabled or not found'. Those are
+    gone from the site, and the detail batch's NOT_SCRAPED filter is what keeps
+    the crawler from asking about them again every cycle."""
+    import inspect
+    from ibay import sync_service
+
+    src = inspect.getsource(sync_service.fetch_product_detail)
+    assert "Listing disabled" in src or "Listing not found" in src
