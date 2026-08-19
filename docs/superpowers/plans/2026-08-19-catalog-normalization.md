@@ -3829,8 +3829,16 @@ built from every listing of the thing, and a per-document extraction is built
 from one.
 
 `profile_tier` on the card is what the frontend renders the caveat from. It is
-the lowest tier among the winning fields, because a profile is only as
-trustworthy as its weakest displayed value.
+the DOMINANT tier -- the one holding the most winning fields -- not the lowest.
+Lowest was the original design, on the reasoning that a profile is only as
+trustworthy as its weakest value, and measurement destroyed it: 7,641 of 7,794
+entity-backed cards came out `inferred` because one inferred boolean such as
+call_out dragged down an otherwise grounded profile. A caveat that fires on 98%
+of cards tells a reader nothing.
+
+`inferred_count` and `field_count` travel with it so the UI can be specific
+("3 of 11 details from model knowledge") instead of blanket, and the detail page
+still has per-field provenance for the exact ones.
 """
 
 from __future__ import annotations
@@ -3860,7 +3868,15 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
 
     fields = winning_fields(entity)
     tiers = [f.provenance for f in fields]
-    lowest = max(tiers, key=PROVENANCE_ORDER.index) if tiers else ""
+    dominant = ""
+    if tiers:
+        # Most frequent tier; ties break toward the WEAKER one, so a profile
+        # split evenly between grounded and inferred does not read as grounded.
+        counts = {t: tiers.count(t) for t in set(tiers)}
+        best = max(counts.values())
+        dominant = max((t for t, n in counts.items() if n == best),
+                       key=PROVENANCE_ORDER.index)
+    inferred_count = sum(1 for t in tiers if t == "inferred")
 
     if entity.title_en:
         draft.title_en = entity.title_en
@@ -3875,13 +3891,17 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
         **draft.attrs,
         "entity_id": entity.id,
         "entity_kind": entity.kind,
-        "profile_tier": lowest,
+        "profile_tier": dominant,
+        "inferred_count": inferred_count,
+        "field_count": len(fields),
         "identity_confidence": entity.identity_confidence,
     }
 
     card = dict(draft.card)
     card["entity_id"] = entity.id
-    card["profile_tier"] = lowest
+    card["profile_tier"] = dominant
+    card["inferred_count"] = inferred_count
+    card["field_count"] = len(fields)
     card["listing_count"] = entity.listing_count
     if entity.category_id:
         card["category_leaf"] = entity.category.label_en
@@ -4707,6 +4727,13 @@ python manage.py build_profiles --kind product
 ```
 
 - [ ] **Step 4: Merge, project, reindex**
+
+The order is not a preference. `recompute_all` run while `build_profiles` is
+still in flight silently leaves every entity profiled after it with no winning
+fields, and an entity with no winners projects no `DocumentSpec` rows and shows
+an empty trust label. Observed: run mid-pass it reported 3,844 winners and left
+348 of 600 sampled entities blank; re-run after the pass, 7,000 winners and none
+blank. Wait for the profile pass to exit before merging.
 
 ```bash
 python manage.py shell -c "

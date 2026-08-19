@@ -42,6 +42,25 @@ SINGLE_VALUED_KEYS = {
 }
 
 
+def dominant_tier(fields) -> str:
+    """The tier holding the most winning fields, ties breaking toward the weaker.
+
+    One definition, because it was briefly two. The card computed it in
+    catalog/overlay.py and the API recomputed it in api/routers/entities.py, and
+    when the rule changed from weakest-tier to dominant-tier only one of them was
+    updated -- so the same entity read `grounded` on its card and `inferred` on
+    its detail page. A displayed trust label that contradicts itself is worse
+    than either version alone.
+    """
+    tiers = [f.provenance for f in fields]
+    if not tiers:
+        return ""
+    counts = {t: tiers.count(t) for t in set(tiers)}
+    best = max(counts.values())
+    return max((t for t, n in counts.items() if n == best),
+               key=PROVENANCE_ORDER.index)
+
+
 def winning_fields(entity: Entity) -> list[EntityField]:
     return list(EntityField.objects.filter(entity=entity, is_winner=True)
                 .select_related("key").order_by("key_raw"))

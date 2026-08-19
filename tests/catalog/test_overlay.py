@@ -125,3 +125,40 @@ def test_a_service_entity_gets_the_service_card(db):
     assert card["kind"] == "service"
     assert card["coverage"] == ["Male'"]
     assert card["phone"] == "7438649"
+
+
+@pytest.mark.django_db
+def test_profile_tier_is_the_dominant_tier_not_the_weakest(linked):
+    """Measured: taking the lowest tier labelled 7,641 of 7,794 entity-backed
+    cards 'inferred' because one inferred boolean outvoted everything else. A
+    caveat that fires on 98% of cards is noise."""
+    for i in range(4):
+        EntityField.objects.create(entity=linked, key_raw=f"k{i}",
+                                   value_text=f"v{i}", provenance="grounded",
+                                   is_winner=True)
+    EntityField.objects.create(entity=linked, key_raw="call_out",
+                               value_text="yes", provenance="inferred",
+                               is_winner=True)
+    card = apply_entity(draft()).card
+    assert card["profile_tier"] == "grounded"
+    assert card["inferred_count"] == 1
+    assert card["field_count"] == 5
+
+
+@pytest.mark.django_db
+def test_an_evenly_split_profile_reads_as_the_weaker_tier(linked):
+    """A tie must not flatter the profile."""
+    EntityField.objects.create(entity=linked, key_raw="a", value_text="x",
+                               provenance="grounded", is_winner=True)
+    EntityField.objects.create(entity=linked, key_raw="b", value_text="y",
+                               provenance="inferred", is_winner=True)
+    assert apply_entity(draft()).card["profile_tier"] == "inferred"
+
+
+@pytest.mark.django_db
+def test_a_wholly_inferred_profile_still_says_inferred(linked):
+    EntityField.objects.create(entity=linked, key_raw="a", value_text="x",
+                               provenance="inferred", is_winner=True)
+    card = apply_entity(draft()).card
+    assert card["profile_tier"] == "inferred"
+    assert card["inferred_count"] == card["field_count"] == 1

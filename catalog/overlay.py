@@ -6,8 +6,16 @@ built from every listing of the thing, and a per-document extraction is built
 from one.
 
 `profile_tier` on the card is what the frontend renders the caveat from. It is
-the lowest tier among the winning fields, because a profile is only as
-trustworthy as its weakest displayed value.
+the DOMINANT tier -- the one holding the most winning fields -- not the lowest.
+Lowest was the original design, on the reasoning that a profile is only as
+trustworthy as its weakest value, and measurement destroyed it: 7,641 of 7,794
+entity-backed cards came out `inferred` because one inferred boolean such as
+call_out dragged down an otherwise grounded profile. A caveat that fires on 98%
+of cards tells a reader nothing.
+
+`inferred_count` and `field_count` travel with it so the UI can be specific
+("3 of 11 details from model knowledge") instead of blanket, and the detail page
+still has per-field provenance for the exact ones.
 """
 
 from __future__ import annotations
@@ -15,7 +23,7 @@ from __future__ import annotations
 import logging
 
 from catalog.cards import build_service_card, spec_chips
-from catalog.merge import PROVENANCE_ORDER, winning_fields
+from catalog.merge import dominant_tier, winning_fields
 from catalog.models import Entity, EntityLink
 from search.adapters.base import DocumentDraft
 from search.contacts import strip_phones
@@ -37,7 +45,8 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
 
     fields = winning_fields(entity)
     tiers = [f.provenance for f in fields]
-    lowest = max(tiers, key=PROVENANCE_ORDER.index) if tiers else ""
+    dominant = dominant_tier(fields)
+    inferred_count = sum(1 for t in tiers if t == "inferred")
 
     if entity.title_en:
         draft.title_en = entity.title_en
@@ -52,13 +61,17 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
         **draft.attrs,
         "entity_id": entity.id,
         "entity_kind": entity.kind,
-        "profile_tier": lowest,
+        "profile_tier": dominant,
+        "inferred_count": inferred_count,
+        "field_count": len(fields),
         "identity_confidence": entity.identity_confidence,
     }
 
     card = dict(draft.card)
     card["entity_id"] = entity.id
-    card["profile_tier"] = lowest
+    card["profile_tier"] = dominant
+    card["inferred_count"] = inferred_count
+    card["field_count"] = len(fields)
     card["listing_count"] = entity.listing_count
     if entity.category_id:
         card["category_leaf"] = entity.category.label_en

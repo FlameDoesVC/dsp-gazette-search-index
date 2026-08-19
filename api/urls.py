@@ -1,6 +1,6 @@
 from ninja import NinjaAPI
 
-from api.routers import documents, events, meta, search, suggest
+from api.routers import documents, entities, events, meta, search, suggest
 
 api = NinjaAPI(
     title="Beynunehcheh",
@@ -18,3 +18,4 @@ api.add_router("", search.router, tags=["search"])
 api.add_router("", suggest.router, tags=["suggest"])
 api.add_router("", events.router, tags=["events"])
 api.add_router("", documents.router, tags=["documents"])
+api.add_router("", entities.router, tags=["entities"])

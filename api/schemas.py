@@ -115,3 +115,55 @@ class ClickIn(Schema):
 
 class AcceptedOut(Schema):
     status: str = "accepted"
+
+
+class EntityFieldOut(Schema):
+    key_raw: str
+    value_num: float | None = None
+    value_text: str = ""
+    unit: str = ""
+    provenance: str
+    support_count: int
+
+
+class EntitySourceOut(Schema):
+    """One listing an entity stands for. This is the profile's evidence.
+
+    Verified on the live corpus: all 11,886 links resolve to a document with a
+    non-empty url, so a profile can always be traced back to the individual ads
+    behind it -- including the 453-listing entity one advertiser produced.
+    """
+
+    document_id: int
+    source: str
+    source_key: str
+    url: str
+    title: str
+
+
+class EntityOut(Schema):
+    id: int
+    kind: str
+    title_en: str
+    title_dv: str = ""
+    summary_en: str = ""
+    summary_dv: str = ""
+    brand: str = ""
+    model_name: str = ""
+    service_type: str = ""
+    category_key: str | None = None
+    identity_confidence: float
+    profile_tier: str = ""
+    listing_count: int
+    inferred_count: int = 0
+    fields: list[EntityFieldOut] = []
+    # Capped, because one entity reaches 453 listings and a detail response is
+    # not a paginated feed. listing_count carries the true total.
+    sources: list[EntitySourceOut] = []
+
+
+class ProposalIn(Schema):
+    key_raw: str
+    value_num: float | None = None
+    value_text: str = ""
+    unit: str = ""
