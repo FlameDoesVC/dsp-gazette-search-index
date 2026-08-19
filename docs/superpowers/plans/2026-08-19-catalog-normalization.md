@@ -2653,10 +2653,63 @@ from enrich.validate import (MIN_GROUNDED_LEN, STRING_OVERLAP_FLOOR,
                              normalize_for_match, token_overlap)
 
 
+# Keys whose values the model is expected to NORMALIZE rather than copy, so an
+# exact-substring test is the wrong question. Measured across two providers on
+# real service entities: 'Door lock repair' against a listing reading 'We fix
+# door locks, smart locks, door frame, door closer' scores 0.67 overlap and
+# fails the 0.85 floor. That is faithful summarising, not fabrication, and
+# demoting it would put a "may not be accurate" caveat on all 1,747 service
+# entities while they are in fact accurate. enrich/validate.py already carries
+# the same exemption list for the same reason (_UNGROUNDED_STRING_FIELDS).
+NORMALIZED_KEYS = {"service_offered", "coverage", "rate_basis", "call_out",
+                   "shop_visit", "availability", "brand"}
+# The floor for those keys. Lower than STRING_OVERLAP_FLOOR because a paraphrase
+# shares content words but not phrasing; still high enough that an invented
+# service the listings never mention fails.
+NORMALIZED_OVERLAP_FLOOR = 0.5
+
+
+def _fold_plural(text: str) -> str:
+    """Crude singular/plural fold before comparing normalized values.
+
+    Necessary, not cosmetic, and it was missed on the first pass. Sellers write
+    plurals and models write singulars: 'We fix door locks, ... fans and
+    heaters' against 'Door lock repair', 'Fan repair', 'Heater repair'. Unfolded
+    those score 0.333, 0.0 and 0.0 and every one is demoted, which defeats the
+    exemption entirely. Folded they score 0.667, 0.5 and 0.5, while 'Marine
+    engine overhaul', 'Aircon gas refill' and 'Stainless steel fabrication' --
+    services these listings never mention -- stay at 0.0. All nine measured
+    cases classify correctly at the 0.5 floor.
+
+    Trailing 's' only, on tokens over three characters, skipping '-ss'. A real
+    stemmer would be a dependency and a worse fit: this compares two short label
+    strings, not prose.
+    """
+    out = []
+    for token in normalize_for_match(text).split():
+        if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+            token = token[:-1]
+        out.append(token)
+    return " ".join(out)
+
+
+def _folded_overlap(value: str, union_text: str) -> float:
+    a, b = set(_fold_plural(value).split()), set(_fold_plural(union_text).split())
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
 def classify_origin(*, claimed: str, value_num, value_text: str,
-                    union_text: str, candidates: Candidates) -> str:
+                    union_text: str, candidates: Candidates,
+                    key_raw: str = "") -> str:
     if claimed != "from_listings":
         return "inferred"
+
+    if key_raw in NORMALIZED_KEYS and value_text:
+        return ("grounded"
+                if _folded_overlap(value_text, union_text) >= NORMALIZED_OVERLAP_FLOOR
+                else "inferred")
 
     if value_num is not None:
         formatted = (str(int(value_num)) if float(value_num).is_integer()
@@ -2679,6 +2732,43 @@ def classify_origin(*, claimed: str, value_num, value_text: str,
 
 Run: `pytest tests/catalog/test_tiers.py -v`
 Expected: PASS, 6 tests.
+
+- [ ] **Step 4b: Test the normalization exemption**
+
+Append to `tests/catalog/test_tiers.py`:
+
+```python
+SERVICE_UNION = ("We fix door locks, smart locks, door, door frame, door "
+                 "closer, fans and heaters. Male' and Hulhumale'. 9663178")
+SERVICE_CAND = extract_candidates(SERVICE_UNION)
+
+
+def test_a_paraphrased_service_stays_grounded():
+    """Measured across two providers: both emit 'Door lock repair' for 'We fix
+    door locks'. That is summarising, not fabricating, and demoting it would
+    caveat all 1,747 service entities while they are accurate."""
+    assert classify_origin(claimed="from_listings", value_num=None,
+                           value_text="Door lock repair",
+                           union_text=SERVICE_UNION, candidates=SERVICE_CAND,
+                           key_raw="service_offered") == "grounded"
+
+
+def test_an_invented_service_is_still_demoted():
+    """The lower floor must not become no floor."""
+    assert classify_origin(claimed="from_listings", value_num=None,
+                           value_text="Marine engine overhaul",
+                           union_text=SERVICE_UNION, candidates=SERVICE_CAND,
+                           key_raw="service_offered") == "inferred"
+
+
+def test_a_product_spec_keeps_the_strict_floor():
+    """The exemption is per key, not global: a spec value is copied, not
+    paraphrased, so battery_mah keeps the numeric candidate-set test."""
+    assert classify_origin(claimed="from_listings", value_num=5000,
+                           value_text="", union_text=SERVICE_UNION,
+                           candidates=SERVICE_CAND,
+                           key_raw="battery_mah") == "inferred"
+```
 
 - [ ] **Step 5: Write the profile schemas**
 
@@ -2794,6 +2884,12 @@ the LISTINGS block. Use `from_knowledge` when you know it about this product but
 the listings do not say it. Mislabelling gains you nothing: a `from_listings` \
 claim that the text does not support is stored as knowledge anyway, and \
 knowledge that turns out to be wrong is what users correct.
+1a. DO include specs you know about this product that the listings omit, tagged \
+`from_knowledge`. Measured: given no such instruction, DeepSeek emitted zero \
+`from_knowledge` specs across five entities and a local 12B emitted one, which \
+would leave the inferred tier empty -- and filling it is the entire reason the \
+entity layer exists for the 74% of products that are the only listing of \
+themselves. For a product you recognise, state the specs a buyer would want.
 2. `category_key` must be one of the keys in the CATEGORIES block, or empty. \
 Never invent a category.
 3. Write `title_en` as the product or service a person would search for, with no \
@@ -3073,7 +3169,7 @@ def _store_fields(entity: Entity, out: EntityProfileOutput,
         provenance = classify_origin(claimed=claimed, value_num=value_num,
                                      value_text=value_text,
                                      union_text=inp.union_text,
-                                     candidates=candidates)
+                                     candidates=candidates, key_raw=key_raw)
         rows.append(EntityField(
             entity=entity, key_raw=key_raw,
             key=registry.get(key_raw), value_num=value_num,
