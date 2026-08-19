@@ -71,6 +71,15 @@ def _row(draft: DocumentDraft) -> SearchDocument:
     category = map_path(draft.source, [str(p) for p in path])
     category_leaf = category.label_en if category else (str(path[-1]) if path else "")
     card = dict(draft.card or {})
+    # Deterministic, every source, no model call. Measured 89.3% coverage.
+    from search.contacts import primary_phone, strip_phones
+    phone = primary_phone(draft.title_en, draft.title_dv,
+                          draft.summary_en, draft.summary_dv, draft.text_en)
+    if phone:
+        card["phone"] = phone
+        # Display only: title_en keeps the number so the vector keeps it too.
+        if card.get("title"):
+            card["title"] = strip_phones(card["title"])
     if category_leaf and not card.get("category_leaf"):
         card["category_leaf"] = category_leaf
     # So the frontend can render "N similar listings" (P9 task 5 step 7).
@@ -117,6 +126,7 @@ def _row(draft: DocumentDraft) -> SearchDocument:
         stale_marked_at=None,   # a successful pass clears the work ticket
         category_leaf=category_leaf,
         category=category,
+        contact_phone=phone,
         dedupe_key=dedupe_key_value,
     )
 

@@ -1117,7 +1117,10 @@ def strip_phones(text: str) -> str:
     """
     out = PHONE_RE.sub("", text or "")
     out = _LEFTOVER_SPACE.sub(" ", out)
-    return out.strip(" \t-,|/:").strip()
+    # '&' is in the strip set because sellers write 'FREE DELIVERY | &7776828',
+    # which otherwise renders as a title ending in '| &'. '.' is deliberately
+    # NOT: 'Aircon Repair & Service.' ends in a sentence, not in debris.
+    return out.strip(" \t-,|/:&").strip()
 ```
 
 - [ ] **Step 4: Point `preextract` at the shared pattern**
@@ -1224,8 +1227,19 @@ Run:
 ```bash
 python manage.py backfill_phones --source ibay
 ```
-Expected: about 14,839 documents, matching the 89.3% measured in the spec. A
-materially lower number means the pattern or the field order regressed.
+Measured 2026-08-19, and note the command covers EVERY doc_type while the
+spec's 89.3% figure was shopping only:
+
+| doc_type | with a phone | total | share |
+|---|---|---|---|
+| shopping | 14,848 | 16,608 | 89.4% |
+| property | 2,967 | 3,497 | 84.8% |
+| job | 120 | 335 | 35.8% |
+| **all ibay** | **17,938** | **20,445** | **87.7%** |
+
+1,601 distinct numbers, and the top advertiser (`7438649`) holds 1,680 listings.
+A materially lower shopping share means the pattern or the field order
+regressed. Jobs are low because an employer ad carries an email, not a mobile.
 
 - [ ] **Step 9: Commit**
 

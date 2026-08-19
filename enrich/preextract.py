@@ -19,11 +19,10 @@ from dataclasses import dataclass, field
 
 from search.extract.dates import parse_dv_month
 
-# Maldivian numbers are seven digits: mobile starts 7 or 9, landline 3 or 6.
-# The +960 prefix is optional and the number is frequently embedded in a title
-# with no separator, hence the explicit boundary guards rather than \b (which
-# would happily match the '445' tail of a longer run of digits).
-_PHONE = re.compile(r"(?<![\d])(?:\+?960[\s\-]?)?([79]\d{6}|[36]\d{6})(?![\d])")
+from search.contacts import PHONE_RE
+
+# One definition, shared with the entity layer's provider key (spec section 7.2).
+_PHONE = PHONE_RE
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _URL = re.compile(r"https?://[^\s<>\"')\]]+")
