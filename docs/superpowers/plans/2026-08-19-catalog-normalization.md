@@ -1279,8 +1279,9 @@ task 5, in one migration. Only `Brand` is used here.
 ```python
 import pytest
 
-from catalog.identity import (brand_vocabulary, clean_title, match_brand,
-                              model_tokens, product_key, service_key)
+from catalog.identity import (brand_vocabulary, clean_title,
+                              identity_confidence, match_brand, model_tokens,
+                              product_key, service_key)
 from catalog.models import Brand
 
 
@@ -1694,9 +1695,9 @@ jj commit -m "catalog task 4: deterministic identity extraction and brand vocabu
 ## Task 5: Entities, links and resolution
 
 **Files:**
-- Modify: `catalog/models.py`, `catalog/admin.py`
+- Modify: `catalog/models.py`, `catalog/admin.py`, `catalog/identity.py`
 - Create: `catalog/resolve.py`, `catalog/management/commands/resolve_entities.py`, `catalog/management/commands/eval_entities.py`, `catalog/eval/golden.yaml`
-- Test: `tests/catalog/test_resolve.py`
+- Test: `tests/catalog/test_resolve.py`, `tests/catalog/test_identity.py` (append)
 
 **Interfaces:**
 - Consumes: everything from task 4; `map_path` from task 1; `contact_phone` from task 3.
@@ -1713,6 +1714,77 @@ jj commit -m "catalog task 4: deterministic identity extraction and brand vocabu
   resolve_document(doc: SearchDocument) -> Entity | None
   resolve_source(source: str, *, limit=None, dry_run=False) -> dict
   ```
+
+- [ ] **Step 0: Grade identity strength in `catalog/identity.py`**
+
+Add to `catalog/identity.py`:
+
+```python
+# A real model designator carries letters AND digits: SQ905, T200, SK-319,
+# QUEST-2, A15. A bare unit value does not identify anything -- '256GB' and '2A'
+# are specs that thousands of listings share.
+_HAS_LETTER_AND_DIGIT = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)")
+_BARE_UNIT = re.compile(
+    r"^\d+(?:\.\d+)?(?:W|V|A|GB|TB|MB|MAH|KG|ML|CM|MM|L|INCH|K)$", re.I)
+
+
+def strong_tokens(tokens: list[str]) -> list[str]:
+    """The subset of `tokens` that actually designates a model."""
+    return [t for t in tokens
+            if _HAS_LETTER_AND_DIGIT.match(t) and not _BARE_UNIT.match(t)]
+
+
+def identity_confidence(brand: str, tokens: list[str]) -> float:
+    """How much the identity can be trusted, in [0, 1].
+
+    This gates whether inferred specs reach DocumentSpec (spec section 9), so
+    the grading is measured rather than assumed. Of the 2,745 For Sale listings
+    that match no known brand, 87.9% still carry a strong model designator
+    (`SQ905`, `SK-319`, `QUEST-2`) and only 12.1% offer nothing but a bare unit.
+
+    A model designator therefore outranks a brand: `SQ905` is close to a unique
+    key, while `Samsung` with no model is thousands of different products. A
+    both-or-nothing rule scored the 87.9% at 0.5 and put them below the 0.7
+    floor, which would have left facet coverage almost exactly where the entity
+    layer found it.
+    """
+    strong = strong_tokens(tokens)
+    if brand and strong:
+        return 0.9
+    if strong:
+        return 0.8
+    if brand and tokens:
+        return 0.7
+    if brand:
+        return 0.6
+    return 0.4          # bare units only: weakest identity that still resolves
+```
+
+- [ ] **Step 0b: Test the grading**
+
+Append to `tests/catalog/test_identity.py`:
+
+```python
+@pytest.mark.parametrize("brand,tokens,expected", [
+    ("Samsung", ["A15", "128GB"], 0.9),
+    ("", ["SQ905"], 0.8),               # 87.9% of unbranded listings land here
+    ("", ["SK-319", "256GB"], 0.8),
+    ("Samsung", ["256GB"], 0.7),        # brand, but the token is a spec
+    ("Samsung", [], 0.6),
+    ("", ["256GB"], 0.4),               # identifies nothing on its own
+    ("", ["2A"], 0.4),
+])
+def test_identity_confidence_grades_model_designators_above_brands(
+        brand, tokens, expected):
+    from catalog.identity import identity_confidence
+    assert identity_confidence(brand, tokens) == expected
+
+
+def test_strong_tokens_rejects_bare_units():
+    from catalog.identity import strong_tokens
+    assert strong_tokens(["256GB", "2A", "200CM"]) == []
+    assert strong_tokens(["QUEST-2", "256GB"]) == ["QUEST-2"]
+```
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2029,8 +2101,9 @@ import logging
 from django.conf import settings
 from django.db import transaction
 
-from catalog.identity import (brand_vocabulary, clean_title, match_brand,
-                              model_tokens, product_key, service_key)
+from catalog.identity import (brand_vocabulary, clean_title,
+                              identity_confidence, match_brand, model_tokens,
+                              product_key, service_key)
 from catalog.models import Entity, EntityLink
 from search.contacts import primary_phone
 from search.models import SearchDocument
@@ -2039,6 +2112,29 @@ from search.taxonomy import map_path
 logger = logging.getLogger(__name__)
 
 SERVICE_ROOTS = {"Services"}
+PRODUCT_ROOTS = {"For Sale"}
+# Spec section 2 scopes this project to iBay For Sale and Services. Everything
+# else is out, and the gate has to be explicit rather than emergent: measured on
+# the live corpus, without it 714 property listings resolved as PRODUCTS,
+# because 'FACE2' in '3ROOM APARTMENT @HULHUMALE FACE2 VINARES' looks exactly
+# like a model designator. Task 6 would then have paid a model call per
+# apartment to write it a spec sheet.
+#
+# This gate reads the source's own root rather than the canonical tier on
+# purpose: the taxonomy says what a thing IS, not whether this project handles
+# it, and the seeder classifies housing as tier `primary` because an apartment
+# is a primary listing in its own family. Scope and taxonomy are different
+# questions and conflating them is what produced the defect.
+IN_SCOPE_DOC_TYPES = {"shopping"}
+
+
+def in_scope(doc: SearchDocument) -> bool:
+    if doc.doc_type not in IN_SCOPE_DOC_TYPES:
+        return False
+    path = [str(p) for p in (doc.attrs.get("category_path") or [])]
+    if not path:
+        return False
+    return path[0] in SERVICE_ROOTS or path[0] in PRODUCT_ROOTS
 
 
 def _mapped_key(doc: SearchDocument) -> str:
@@ -2066,10 +2162,13 @@ def _provider_key(doc: SearchDocument) -> str:
 def resolve_document(doc: SearchDocument, *, vocabulary=None) -> Entity | None:
     """The entity this document belongs to, creating it if new.
 
-    Returns None when the document carries no usable identity. That is a
-    deliberate miss: an entity built on a guessed brand puts wrong specs on a
-    real listing, which is worse than no profile at all.
+    Returns None when the document is out of scope, or when it carries no usable
+    identity. The second is a deliberate miss: an entity built on a guessed
+    brand puts wrong specs on a real listing, which is worse than no profile.
     """
+    if not in_scope(doc):
+        return None
+
     mapped = _mapped_key(doc)
 
     if _is_service(doc):
@@ -2095,9 +2194,11 @@ def resolve_document(doc: SearchDocument, *, vocabulary=None) -> Entity | None:
             "kind": "product",
             "brand": brand,
             "model_name": " ".join(tokens)[:128],
-            # Both signals present is the only high-confidence case; the
-            # inferred-spec filter floor reads this (spec section 9).
-            "identity_confidence": 0.9 if (brand and tokens) else 0.5,
+            # Graded, not both-or-nothing. This number gates whether inferred
+            # specs reach DocumentSpec (spec section 9), so see
+            # identity_confidence() in catalog/identity.py for why a model
+            # designator alone outranks a brand alone.
+            "identity_confidence": identity_confidence(brand, tokens),
         }
         method = "identity_match"
 
@@ -2329,6 +2430,15 @@ class Command(BaseCommand):
 
 Add `PyYAML` is already in requirements (6.0.3), so no dependency change.
 
+- [ ] **Step 7b: Test the scope gate**
+
+Append to `tests/catalog/test_resolve.py` tests asserting `resolve_document`
+returns `None` for: a `property` document, a `job` document, a `shopping`
+document with no `category_path` (106 of these resolved as products before the
+gate), and one under each of `Wanted`, `Business Opportunities` and
+`Free Stuff`. Then one test asserting `For Sale` and `Services` documents still
+resolve, so the gate is not so tight that it excludes the corpus it is for.
+
 - [ ] **Step 8: Resolve the real corpus and label**
 
 Run:
@@ -2338,9 +2448,36 @@ python manage.py eval_entities --sample 50
 # fill in `correct:` for all 50 rows by hand, then:
 python manage.py eval_entities
 ```
-Expected: about 3,800 product entities and about 1,500 service entities. Do not
-proceed to task 6 with precision below 90% - fix the brand vocabulary or the
-token rules first.
+Measured 2026-08-19:
+
+| | listings | entities | collapse |
+|---|---|---|---|
+| product | 5,991 | 2,900 | 2.07:1 |
+| service | 9,174 | 1,747 | 5.25:1 |
+| **total** | **15,165** | **4,647** | |
+
+Everything left unlinked is out of scope (3,497 property, 335 jobs, 188 with no
+path, 142 Wanted/Business Opportunities/Free Stuff) or a genuine identity miss
+(1,113 For Sale, the 15.7% from task 4). The numbers reconcile exactly:
+7,105 For Sale - 1,113 missed - 1 reclassified as a service = 5,991.
+
+Product identity confidence, which decides whether inferred specs reach
+`DocumentSpec` at the 0.7 floor:
+
+| confidence | entities | share |
+|---|---|---|
+| 0.9 | 1,093 | 37.7% |
+| 0.8 | 1,211 | 41.8% |
+| 0.7 | 230 | 7.9% |
+| 0.6 | 167 | 5.8% |
+| 0.4 | 199 | 6.9% |
+
+**87.4% clear the floor**, against 28.4% under the both-or-nothing rule this
+plan originally specified. That difference is the entire argument for step 0's
+graded scoring.
+
+Do not proceed to task 6 with precision below 90% - fix the brand vocabulary or
+the token rules first.
 
 - [ ] **Step 9: Commit**
 

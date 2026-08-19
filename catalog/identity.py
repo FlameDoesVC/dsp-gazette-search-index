@@ -87,3 +87,43 @@ def product_key(brand: str, tokens: list[str], category_key: str) -> str:
 def service_key(provider_key: str, service_type: str) -> str:
     return _key("service", (provider_key or "").strip().lower(),
                 (service_type or "").strip().lower())
+
+
+# A real model designator carries letters AND digits: SQ905, T200, SK-319,
+# QUEST-2, A15. A bare unit value does not identify anything -- '256GB' and '2A'
+# are specs that thousands of listings share.
+_HAS_LETTER_AND_DIGIT = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)")
+_BARE_UNIT = re.compile(
+    r"^\d+(?:\.\d+)?(?:W|V|A|GB|TB|MB|MAH|KG|ML|CM|MM|L|INCH|K)$", re.I)
+
+
+def strong_tokens(tokens: list[str]) -> list[str]:
+    """The subset of `tokens` that actually designates a model."""
+    return [t for t in tokens
+            if _HAS_LETTER_AND_DIGIT.match(t) and not _BARE_UNIT.match(t)]
+
+
+def identity_confidence(brand: str, tokens: list[str]) -> float:
+    """How much the identity can be trusted, in [0, 1].
+
+    This gates whether inferred specs reach DocumentSpec (spec section 9), so
+    the grading is measured rather than assumed. Of the 2,745 For Sale listings
+    that match no known brand, 87.9% still carry a strong model designator
+    (`SQ905`, `SK-319`, `QUEST-2`) and only 12.1% offer nothing but a bare unit.
+
+    A model designator therefore outranks a brand: `SQ905` is close to a unique
+    key, while `Samsung` with no model is thousands of different products. A
+    both-or-nothing rule scored the 87.9% at 0.5 and put them below the 0.7
+    floor, which would have left facet coverage almost exactly where the entity
+    layer found it.
+    """
+    strong = strong_tokens(tokens)
+    if brand and strong:
+        return 0.9
+    if strong:
+        return 0.8
+    if brand and tokens:
+        return 0.7
+    if brand:
+        return 0.6
+    return 0.4          # bare units only: weakest identity that still resolves

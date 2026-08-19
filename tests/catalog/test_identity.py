@@ -127,3 +127,24 @@ def test_seed_brands_adds_the_curated_brands_with_no_documentspec_rows():
     call_command("seed_brands")
     for name in ("JBL", "DJI", "Sharp", "Anker"):
         assert Brand.objects.filter(name=name).exists(), name
+
+
+@pytest.mark.parametrize("brand,tokens,expected", [
+    ("Samsung", ["A15", "128GB"], 0.9),
+    ("", ["SQ905"], 0.8),               # 87.9% of unbranded listings land here
+    ("", ["SK-319", "256GB"], 0.8),
+    ("Samsung", ["256GB"], 0.7),        # brand, but the token is a spec
+    ("Samsung", [], 0.6),
+    ("", ["256GB"], 0.4),               # identifies nothing on its own
+    ("", ["2A"], 0.4),
+])
+def test_identity_confidence_grades_model_designators_above_brands(
+        brand, tokens, expected):
+    from catalog.identity import identity_confidence
+    assert identity_confidence(brand, tokens) == expected
+
+
+def test_strong_tokens_rejects_bare_units():
+    from catalog.identity import strong_tokens
+    assert strong_tokens(["256GB", "2A", "200CM"]) == []
+    assert strong_tokens(["QUEST-2", "256GB"]) == ["QUEST-2"]
