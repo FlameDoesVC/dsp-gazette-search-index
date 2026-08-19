@@ -183,3 +183,66 @@ def test_for_sale_and_services_remain_in_scope(fixtures):
     assert in_scope(sale) and in_scope(svc)
     assert resolve_document(sale) is not None
     assert resolve_document(svc) is not None
+
+
+# --------------------------------------------------------------------------
+# Discriminating identity. The golden set scored 50% on products without this:
+# brand-only grouped 214 Apple accessories, and the token PS5 grouped 291 games.
+# --------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_a_brand_with_no_model_designator_forms_no_entity(fixtures):
+    """A brand is a category, not an identity. 'Apple' as the only signal put
+    214 different accessories in one entity on the live corpus."""
+    path = ["For Sale", "Mobile Phones & Accessories", "Mobile Phones"]
+    doc = make_doc("d1", "Apple original accessory brand new", path)
+    assert resolve_document(doc, stopwords=set()) is None
+
+
+@pytest.mark.django_db
+def test_a_platform_token_forms_no_entity(fixtures):
+    """PS5 appears in 426 For Sale listings; it names a console, not a game."""
+    path = ["For Sale", "Video & Computer Gaming", "Games"]
+    a = make_doc("d2", "Immortals Fenyx Rising - PS5 Brand New Sealed", path)
+    b = make_doc("d3", "Alan Wake 2 Deluxe Edition PS5 Game Sealed", path)
+    assert resolve_document(a, stopwords={"PS5"}) is None
+    assert resolve_document(b, stopwords={"PS5"}) is None
+    assert Entity.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_a_real_model_designator_still_resolves(fixtures):
+    path = ["For Sale", "Mobile Phones & Accessories", "Mobile Phones"]
+    doc = make_doc("d4", "SONY WH-1000XM5 Noise Cancelling Headset", path)
+    entity = resolve_document(doc, stopwords={"PS5", "256GB"})
+    assert entity is not None
+    assert "WH-1000XM5" in entity.model_name
+
+
+@pytest.mark.django_db
+def test_a_stopword_token_is_dropped_from_the_key_not_the_listing(fixtures):
+    """'Galaxy A15 256GB' keys on A15; 256GB is a capacity 163 listings share.
+    The listing still resolves -- only the useless token is discarded."""
+    path = ["For Sale", "Mobile Phones & Accessories", "Mobile Phones"]
+    doc = make_doc("d5", "Samsung Galaxy A15 256GB brand new", path)
+    entity = resolve_document(doc, stopwords={"256GB"})
+    assert entity is not None
+    assert "256GB" not in entity.model_name
+    assert "A15" in entity.model_name
+
+
+@pytest.mark.django_db
+def test_identity_stopwords_are_derived_from_document_frequency(db):
+    """Derived, not curated: a blocklist needs an entry per new console."""
+    from catalog.identity import clear_stopword_cache, identity_stopwords
+    from django.test import override_settings
+
+    path = ["For Sale", "Video & Computer Gaming", "Games"]
+    for i in range(4):
+        make_doc(f"f{i}", f"Game Title {i} - PS9 Sealed X{i}00", path)
+    clear_stopword_cache()
+    with override_settings(CATALOG_IDENTITY_STOPWORD_DF=3):
+        sw = identity_stopwords(refresh=True)
+    clear_stopword_cache()
+    assert "PS9" in sw           # in all four listings
+    assert "X100" not in sw      # in exactly one

@@ -305,3 +305,8 @@ REPORT_RATE_WINDOW = int(os.getenv("REPORT_RATE_WINDOW", "3600"))
 SEARCH_DRAFT_OVERLAYS = [
     "enrich.overlay.apply_enrichment",
 ]
+# --- catalog identity (see catalog/identity.py::identity_stopwords) ---
+# A model token appearing in this many For Sale listings or more names a
+# platform, a capacity or a marketing claim, not a product. Measured DF:
+# PS5 426, PS4 266, 5G 214, 256GB 163 against WH-1000XM5 2 and SQ905 1.
+CATALOG_IDENTITY_STOPWORD_DF = int(os.getenv("CATALOG_IDENTITY_STOPWORD_DF", "15"))

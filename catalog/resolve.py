@@ -8,7 +8,8 @@ from django.conf import settings
 from django.db import transaction
 
 from catalog.identity import (brand_vocabulary, clean_title,
-                              identity_confidence, match_brand, model_tokens,
+                              discriminating_tokens, identity_confidence,
+                              identity_stopwords, match_brand, model_tokens,
                               product_key, service_key)
 from catalog.models import Entity, EntityLink
 from search.contacts import primary_phone
@@ -65,7 +66,8 @@ def _provider_key(doc: SearchDocument) -> str:
     return f"seller:{seller}" if seller else ""
 
 
-def resolve_document(doc: SearchDocument, *, vocabulary=None) -> Entity | None:
+def resolve_document(doc: SearchDocument, *, vocabulary=None,
+                     stopwords=None) -> Entity | None:
     """The entity this document belongs to, creating it if new.
 
     Returns None when the document is out of scope, or when it carries no usable
@@ -93,8 +95,19 @@ def resolve_document(doc: SearchDocument, *, vocabulary=None) -> Entity | None:
         vocabulary = brand_vocabulary() if vocabulary is None else vocabulary
         brand = match_brand(doc.title_en, vocabulary)
         tokens = model_tokens(doc.title_en)
-        if not brand and not tokens:
+        # A product entity needs DISCRIMINATING identity, not merely some
+        # identity. Measured on the golden set, requiring only "a brand or any
+        # token" scored 50% precision on products: brand-only put 214 different
+        # Apple accessories in one entity, and the platform token PS5 put 291
+        # different games in another. Both would then have shared one spec
+        # sheet, which is the exact failure the deliberate-miss rule exists to
+        # avoid. So a brand alone is a category, not an identity, and a token
+        # every listing shares identifies nothing.
+        keep = discriminating_tokens(tokens, stopwords if stopwords is not None
+                                     else identity_stopwords())
+        if not keep:
             return None
+        tokens = keep
         key = product_key(brand, tokens, mapped)
         defaults = {
             "kind": "product",
@@ -142,6 +155,8 @@ def recount(entity_ids=None) -> int:
 def resolve_source(source: str, *, limit=None, dry_run=False) -> dict:
     counts = {"seen": 0, "linked": 0, "missed": 0}
     vocabulary = brand_vocabulary()
+    # Derived once per pass: it is a full scan of the corpus titles.
+    stopwords = identity_stopwords()
     qs = (SearchDocument.objects.using(settings.STREAM_DB_ALIAS)
           .filter(source=source)
           .only("id", "source", "source_key", "title_en", "attrs", "card",
@@ -152,7 +167,8 @@ def resolve_source(source: str, *, limit=None, dry_run=False) -> dict:
         counts["seen"] += 1
         if dry_run:
             continue
-        entity = resolve_document(doc, vocabulary=vocabulary)
+        entity = resolve_document(doc, vocabulary=vocabulary,
+                                  stopwords=stopwords)
         counts["linked" if entity else "missed"] += 1
     recount()
     return counts

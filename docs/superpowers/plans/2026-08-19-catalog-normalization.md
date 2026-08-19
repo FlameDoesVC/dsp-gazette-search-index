@@ -2439,6 +2439,70 @@ gate), and one under each of `Wanted`, `Business Opportunities` and
 `Free Stuff`. Then one test asserting `For Sale` and `Services` documents still
 resolve, so the gate is not so tight that it excludes the corpus it is for.
 
+- [ ] **Step 7c: Require DISCRIMINATING identity, not merely identity**
+
+This step exists because the precision gate below **failed at 78.3%** the first
+time it was run, and the failure was entirely on the product side:
+
+| | precision |
+|---|---|
+| service | 26/26 = 100% |
+| product | 10/20 = 50% |
+
+Two systematic over-groupings, both visible only once real siblings were shown:
+
+- **brand-only identity collects a catalogue.** `Apple` as the sole signal put
+  **214 different accessories** in one entity; `JBL` 27; `Samsung` 19; `LG` and
+  `Midea` merged washers and air conditioners of different capacities.
+- **a non-discriminating token does the same.** `PS5` put **291 different games**
+  in one entity; `2IN1` grouped blenders from three brands.
+
+Both would then have shared one spec sheet, which is the exact "wrong specs on a
+real listing" failure the deliberate-miss rule exists to prevent.
+
+Add to `catalog/identity.py` an `identity_stopwords()` derived from corpus
+document frequency, plus `discriminating_tokens(tokens, stopwords)`, and require
+at least one discriminating token before a PRODUCT entity is formed. A brand
+alone is a category, not an identity. Measured DF, which is what makes the
+threshold defensible rather than arbitrary:
+
+```
+PS5 426   PS4 266   5G 214   256GB 163   IP66 66   400W 20   2IN1 19
+WH-1000XM5 2   SQ905 1   DH-IPC-HFW1431S1 1   G06 1
+DF distribution: p50=1  p75=3  p90=7  p95=13  p99=41
+```
+
+`CATALOG_IDENTITY_STOPWORD_DF = 15` removes every platform and capacity word
+while leaving about 97% of distinct tokens usable. Derived rather than curated,
+for the same reason the taxonomy is: a blocklist needs a new entry for every
+console and storage size.
+
+The trade is real and must be reported, not hidden: product listings linked fell
+from 6,062 to 2,712, and the overall miss rate rose from 25.5% to 41.9%. The
+spec's rule decides it -- a deliberate miss beats a wrong entity.
+
+- [ ] **Step 7d: Score a HELD-OUT sample, not the one you tuned against**
+
+The 50 rows in `golden.yaml` are now a tuning set: the stopword rule was chosen
+by looking at their failures. Re-scoring them would be circular. Sample 50 fresh
+listings with a different seed into `catalog/eval/holdout.yaml` and score those.
+
+Measured 2026-08-19 after step 7c:
+
+| | linked | correct | precision |
+|---|---|---|---|
+| service | 29 | 29 | 100% |
+| product | 7 | 5 | 71% |
+| **all** | **36** | **34** | **94.4%** |
+
+The gate passes on the defined criterion. Two caveats to carry into task 6:
+product precision is 71% on a sample of only 7, so its error bars are wide; and
+both remaining product failures are version or generation tokens (`V18` grouping
+Quickbooks with SketchUp, a dropped capacity merging 256GB and 512GB microSD)
+which document frequency cannot catch, because those tokens are genuinely rare.
+Note also that a singleton entity cannot be a mis-grouping at all -- every
+observed failure was a multi-listing merge.
+
 - [ ] **Step 8: Resolve the real corpus and label**
 
 Run:

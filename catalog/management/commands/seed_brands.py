@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count
 
 from catalog.models import Brand
-from search.models import DocumentSpec
+from search.models import DocumentSpec, SpecKey
 
 
 # (canonical name, aliases). Recovered-listing counts from the 2026-08-19 miss
@@ -71,6 +71,26 @@ class Command(BaseCommand):
                 brand.aliases = [*(brand.aliases or []), *new]
                 brand.save(update_fields=["aliases"])
             self.stdout.write(f"{row['n']:5d}  {base}")
+
+        # The SpecKey registry already knows that 'Apple (iPhone)' means Apple,
+        # and the parenthetical is exactly what a title says: 60 For Sale titles
+        # begin with the word iPhone. DocumentSpec cannot supply it, because
+        # normalize_value() collapses the value through value_aliases before the
+        # row is ever written, so the parenthetical never survives to be read
+        # back. Deriving the alias from the registry beats hand-typing it --
+        # same rule as everywhere else in this project.
+        brand_key = SpecKey.objects.filter(key="brand").first()
+        for raw, canonical in (brand_key.value_aliases if brand_key else {}).items():
+            base, aliases = _split_alias(str(raw))
+            target = str(canonical).strip() or base
+            brand = Brand.objects.filter(name=target).first()
+            if brand is None:
+                continue
+            new = [a for a in aliases if a not in (brand.aliases or [])]
+            if new:
+                brand.aliases = [*(brand.aliases or []), *new]
+                brand.save(update_fields=["aliases"])
+                self.stdout.write(f"      alias {target} <- {new}")
 
         # Brands the corpus uses that DocumentSpec cannot supply, because the
         # scraped `Brand` field is only populated on 2,313 of 7,105 For Sale
