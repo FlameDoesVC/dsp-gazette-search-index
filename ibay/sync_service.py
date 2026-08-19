@@ -1,4 +1,5 @@
 import asyncio
+import os
 import logging
 import re
 import threading
@@ -27,7 +28,18 @@ DETAIL_SEMAPHORE_LIMIT = 6
 LINK_SEMAPHORE_LIMIT = 10
 BATCH_SIZE = 20
 LINK_BATCH_CONCURRENCY = 3
-MAX_PAGES_PER_CATEGORY = 5 if settings.DEBUG else None
+# Read the DEBUG default with suspicion, same trap as gazette: DJANGO_DEBUG
+# defaults to 0 in this repo and tests_settings asserts that it does, so on any
+# machine that has not opted in this is None -- unlimited. The real guard is
+# STOP_AFTER_SEEN_PAGES below, which needs no configuration.
+MAX_PAGES_PER_CATEGORY = int(
+    os.getenv("IBAY_MAX_PAGES_PER_CATEGORY", "5" if settings.DEBUG else "0")
+) or None
+# Stop a category once this many CONSECUTIVE pages contain no listing we have not
+# already stored. Search results are newest-first, so a run of fully-known pages
+# means this category has caught up with a previous sync. 0 disables; `sync_ibay
+# --full` overrides for a deliberate backfill.
+STOP_AFTER_SEEN_PAGES = int(os.getenv("IBAY_STOP_AFTER_SEEN_PAGES", "3"))
 SYNC_INTERVAL_SECONDS = 600
 REQUEST_DELAY = 0.5
 
@@ -93,7 +105,13 @@ async def sync_categories(client: httpx.AsyncClient):
     await scrape_category(0)
 
 
-async def sync_product_links(client: httpx.AsyncClient):
+async def sync_product_links(client: httpx.AsyncClient, *,
+                             max_pages: int | None = None,
+                             stop_after_seen: int | None = None):
+    if max_pages is None:
+        max_pages = MAX_PAGES_PER_CATEGORY
+    if stop_after_seen is None:
+        stop_after_seen = STOP_AFTER_SEEN_PAGES
     sem = asyncio.Semaphore(LINK_SEMAPHORE_LIMIT)
     parent_cats = [
         c async for c in Category.objects.filter(depth=1)
@@ -102,7 +120,8 @@ async def sync_product_links(client: httpx.AsyncClient):
 
     async def scrape_category_links(category):
         pages_with_data = 0
-        while MAX_PAGES_PER_CATEGORY is None or pages_with_data < MAX_PAGES_PER_CATEGORY:
+        seen_streak = 0
+        while max_pages is None or pages_with_data < max_pages:
             async with sem:
                 url = (
                     f"{BASE_URL}/index.php?page=search&s_res=GO&lite=0"
@@ -133,16 +152,33 @@ async def sync_product_links(client: httpx.AsyncClient):
                                 url=BASE_URL + "/" + href,
                             )
                         )
+                    new_here = 0
                     for p in products:
-                        await Product.objects.aupdate_or_create(
+                        _, created = await Product.objects.aupdate_or_create(
                             listing_id=p.listing_id,
                             defaults={"name": p.name, "url": p.url},
                         )
+                        new_here += int(created)
                     pages_with_data += 1
+                    # `len(products)` is how many links the page listed, which is
+                    # always hw_num, so the old message read "scraped 100
+                    # products" on every page whether or not any were new. That
+                    # is what made a runaway crawl look like progress. listing_id
+                    # is unique and this is an update_or_create, so a re-seen
+                    # listing was never a duplicate row -- only a silent rewrite.
                     logger.info(
-                        "  %s: scraped %d products (page %d)",
-                        category.name, len(products), pages_with_data,
+                        "  %s: page %d, %d listed, %d new, %d already stored",
+                        category.name, pages_with_data, len(products),
+                        new_here, len(products) - new_here,
                     )
+                    seen_streak = 0 if new_here else seen_streak + 1
+                    if stop_after_seen and seen_streak >= stop_after_seen:
+                        logger.info(
+                            "  %s: stopping, %d consecutive pages held nothing "
+                            "new. Pass --full to crawl the whole category.",
+                            category.name, seen_streak,
+                        )
+                        break
                     await asyncio.sleep(REQUEST_DELAY)
                 except Exception:
                     logger.exception("Error for %s", category.name)
@@ -413,13 +449,20 @@ async def update_stale_products(client: httpx.AsyncClient):
     logger.info("Stale product update done. %d products refreshed.", total)
 
 
-async def sync_all():
+async def sync_all(*, max_pages: int | None = None,
+                   stop_after_seen: int | None = None):
+    """One sync cycle.
+
+    `max_pages` and `stop_after_seen` override the module defaults so the
+    management command can expose them; None means "use the configured value".
+    """
     logger.info("=== Starting ibay sync ===")
     async with httpx.AsyncClient(timeout=60) as client:
         logger.info("--- Syncing categories ---")
         await sync_categories(client)
         logger.info("--- Syncing product links ---")
-        await sync_product_links(client)
+        await sync_product_links(client, max_pages=max_pages,
+                                 stop_after_seen=stop_after_seen)
         logger.info("--- Syncing product details ---")
         await sync_product_details(client)
         logger.info("--- Updating stale products ---")
