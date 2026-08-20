@@ -32,6 +32,26 @@ class ProviderError(RuntimeError):
     """Every stage of the chain failed."""
 
 
+def _extract_usage(provider: str, payload: dict) -> dict:
+    """Token counts as the provider reported them.
+
+    This was being discarded, which is why the only cost figures anyone had were
+    estimates from character counts. DeepSeek reports cache hits and misses
+    separately, and the two differ by a factor of about thirty in price, so an
+    estimate that cannot see the split is not an estimate of anything.
+    """
+    usage = payload.get("usage") or {}
+    return {
+        "calls": 1,
+        "prompt_tokens": usage.get("prompt_tokens", 0) or 0,
+        "completion_tokens": usage.get("completion_tokens", 0) or 0,
+        # DeepSeek's names. Absent on providers that do not cache, which is the
+        # honest answer for them rather than a zero that looks like a miss.
+        "cache_hit_tokens": usage.get("prompt_cache_hit_tokens", 0) or 0,
+        "cache_miss_tokens": usage.get("prompt_cache_miss_tokens", 0) or 0,
+    }
+
+
 def _extract_content(provider: str, payload: dict) -> str:
     if provider == "ollama":
         return (payload.get("message") or {}).get("content", "")
@@ -45,6 +65,12 @@ class EnrichClient:
     def __init__(self, http=None):
         self._http = http
         self._owns_http = http is None
+        self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
+                      "cache_hit_tokens": 0, "cache_miss_tokens": 0}
+
+    def _record_usage(self, provider: str, payload: dict) -> None:
+        for key, value in _extract_usage(provider, payload).items():
+            self.usage[key] = self.usage.get(key, 0) + value
 
     async def _client(self):
         if self._http is None:
@@ -70,7 +96,9 @@ class EnrichClient:
             },
         )
         r.raise_for_status()
-        return _extract_content("deepseek", r.json())
+        payload = r.json()
+        self._record_usage("deepseek", payload)
+        return _extract_content("deepseek", payload)
 
     async def _call_ollama(self, messages: list[dict], model: str) -> str:
         http = await self._client()
@@ -86,7 +114,9 @@ class EnrichClient:
             },
         )
         r.raise_for_status()
-        return _extract_content("ollama", r.json())
+        payload = r.json()
+        self._record_usage("ollama", payload)
+        return _extract_content("ollama", payload)
 
     async def complete(self, messages: list[dict], *, provider: str, model: str) -> dict:
         """One attempt. Raises ProviderError on anything unusable."""

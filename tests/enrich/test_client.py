@@ -11,15 +11,48 @@ def test_prompt_version_is_an_int():
     assert isinstance(PROMPT_VERSION, int) and PROMPT_VERSION >= 1
 
 
-def test_system_prompt_is_identical_across_calls():
-    """It is ~800 tokens and it must hit DeepSeek's context cache, so it
-    cannot interpolate anything per-document. Spec 5.1."""
+def test_system_prompt_is_identical_across_calls_of_one_doc_type():
+    """It must hit DeepSeek's context cache, so it cannot interpolate anything
+    per-document. Spec 5.1.
+
+    The prefix is now per doc type rather than global: 79% of the old prompt was
+    the schemas of doc types the call could not use. A pass runs one doc_type at
+    a time, so a per-type prefix still hits the cache on every call after the
+    first.
+    """
     a = build_messages(source="ibay", doc_type_prior="shopping", title="A",
                        body="b", candidates=extract_candidates("b"), scraped={})
-    b = build_messages(source="gazette", doc_type_prior="job", title="C",
-                       body="d", candidates=extract_candidates("d"), scraped={})
+    b = build_messages(source="gazette", doc_type_prior="shopping", title="C",
+                       body="d", candidates=extract_candidates("d"),
+                       scraped={"office": "Ministry of Example"})
     assert a[0]["content"] == b[0]["content"]
     assert a[0]["role"] == "system"
+    # Nothing per-document reached it.
+    assert "Ministry of Example" not in b[0]["content"]
+    assert "7994400" not in b[0]["content"]
+
+
+def test_each_doc_type_gets_only_its_own_schema():
+    from enrich.prompts import system_prompt
+
+    shopping = system_prompt("shopping")
+    job = system_prompt("job")
+    assert shopping != job
+    # `basic_salary` belongs to the job schema and has no business in a shopping
+    # call. It was in every one of them.
+    assert "basic_salary" in job
+    assert "basic_salary" not in shopping
+    # And the reverse, so this cannot pass by sending nothing at all.
+    assert "seller_type" in shopping
+    assert "seller_type" not in job
+    assert len(shopping) < 6000
+
+
+def test_an_unknown_doc_type_falls_back_rather_than_failing():
+    from enrich.prompts import system_prompt
+
+    assert system_prompt("nonsense") == system_prompt("news")
+    assert system_prompt("") == system_prompt("news")
 
 
 def test_user_prompt_carries_prior_candidates_and_scraped_truth():

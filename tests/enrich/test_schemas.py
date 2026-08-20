@@ -88,3 +88,36 @@ def test_job_attrs_carries_required_documents():
     j = JobAttrs(required_documents=["ID card copy", "Accredited certificates"])
     assert len(j.required_documents) == 2
     assert JobAttrs().required_documents == []
+
+
+def test_a_null_string_is_the_same_claim_as_an_empty_one():
+    """gemmatranslate:12b writes null for both Dhivehi fields on an
+    English-only listing, which is exactly what the prompt asks for ("prefer
+    null over a guess"). Rejecting it cost the whole record: 8 of 8 documents
+    failed validation with usable extractions inside them, which made a
+    locally-runnable model look incapable when it was not."""
+    from enrich.schemas import EnrichmentOutput
+
+    out = EnrichmentOutput(
+        doc_type="shopping", canonical_title_en="Universal AC Remote",
+        canonical_title_dv=None, summary_en="A remote.", summary_dv=None)
+    assert out.canonical_title_dv == ""
+    assert out.summary_dv == ""
+
+
+def test_a_null_number_keeps_its_meaning():
+    """The coercion is restricted to plain `str` fields. `basic_salary: null`
+    means the ad did not state a salary, and "" is not a salary -- turning one
+    into the other would make an unstated wage indistinguishable from a
+    malformed one."""
+    from enrich.schemas import Compensation, JobAttrs
+
+    comp = Compensation(basic_salary=None, basic_salary_max=None, currency=None)
+    assert comp.basic_salary is None
+    assert comp.basic_salary_max is None
+    assert comp.currency == ""          # currency is a plain str
+
+    attrs = JobAttrs(role=None, experience_years=None, vacancies=None)
+    assert attrs.role == ""
+    assert attrs.experience_years is None
+    assert attrs.vacancies is None

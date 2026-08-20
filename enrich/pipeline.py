@@ -133,7 +133,7 @@ def build_input(source: str, source_key: str) -> EnrichInput | None:
 
 async def enrich_one(inp: EnrichInput, client) -> EnrichedRecord:
     """One document, one record. Never raises: a failure is a stored status."""
-    def _messages(repair_error=None):
+    def _messages(schema_for=None, repair_error=None):
         return build_messages(
             source=inp.source,
             doc_type_prior=inp.doc_type_prior,
@@ -141,6 +141,7 @@ async def enrich_one(inp: EnrichInput, client) -> EnrichedRecord:
             body=inp.body,
             candidates=inp.candidates,
             scraped=inp.scraped,
+            schema_for=schema_for,
             repair_error=repair_error,
         )
 
@@ -168,9 +169,36 @@ async def enrich_one(inp: EnrichInput, client) -> EnrichedRecord:
         return record
 
     out = EnrichmentOutput(**payload) if isinstance(payload, dict) else EnrichmentOutput()
-    doc_type, _overridden = apply_confidence_gate(
+    doc_type, overridden = apply_confidence_gate(
         inp.doc_type_prior, out.doc_type, out.doc_type_confidence
     )
+
+    if overridden:
+        # The first call carried the PRIOR's schema, so whatever attrs came back
+        # describe the wrong shape. Ask once more with the right schema. Measured
+        # on the first 31 iBay shopping documents: the model agreed with the
+        # prior 31 times out of 31, so this path is rare and the 61% saved on
+        # every other call pays for it many times over.
+        try:
+            payload, model_name = await client.run_chain(
+                _messages(schema_for=doc_type),
+                rebuild=lambda err: _messages(schema_for=doc_type,
+                                              repair_error=err),
+            )
+        except ProviderError as exc:
+            # The classification still stands; only the extraction is missing.
+            record.status = "failed"
+            record.error = str(exc)[:2000]
+            record.doc_type = doc_type
+            await sync_to_async(record.save)()
+            return record
+        reclassified = (EnrichmentOutput(**payload) if isinstance(payload, dict)
+                        else EnrichmentOutput())
+        # Keep the type the gate accepted. A second disagreement does not get a
+        # third call, or a document the model cannot place would loop.
+        reclassified.doc_type = doc_type
+        reclassified.doc_type_confidence = out.doc_type_confidence
+        out = reclassified
 
     attrs_model, report = ground(
         out.attrs,
@@ -270,5 +298,7 @@ async def run_pass(
     try:
         await asyncio.gather(*(_one(s, k) for s, k in keys))
     finally:
+        usage = dict(client.usage)
         await client.aclose()
+    counts["usage"] = usage
     return counts

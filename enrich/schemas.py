@@ -14,13 +14,36 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _Base(BaseModel):
     # Extra keys are dropped rather than raising: a provider that invents a
     # field should lose the field, not the whole record.
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _null_is_absent(cls, value, info):
+        """A null where a plain string is expected means the model had nothing
+        to say, and that is the same claim as an empty string.
+
+        Same reasoning as extra="ignore" above, in the other direction. The
+        prompt tells the model to prefer null over a guess, so rejecting
+        `"summary_dv": null` on an English-only listing punishes it for
+        following instructions. gemmatranslate:12b writes null for both Dhivehi
+        fields on every English listing, which cost the whole record: 8 of 8
+        documents failed validation with usable extractions inside them.
+
+        Restricted to fields annotated exactly `str`. A nullable number means
+        something different -- `basic_salary: null` is "not stated", and "" is
+        not a salary -- so those keep their None and fail loudly if they are
+        ever given a string.
+        """
+        if value is not None:
+            return value
+        field = cls.model_fields.get(info.field_name)
+        return "" if field is not None and field.annotation is str else value
 
 
 # --------------------------------------------------------------------------

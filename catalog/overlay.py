@@ -16,6 +16,14 @@ of cards tells a reader nothing.
 `inferred_count` and `field_count` travel with it so the UI can be specific
 ("3 of 11 details from model knowledge") instead of blanket, and the detail page
 still has per-field provenance for the exact ones.
+
+A link publishes without a profile. The two halves are separate: the LINK knows
+this listing is one of 34 for the same product, which needs no model call, while
+the PROFILE knows what that product is, which does. Gating both on the profile
+meant resolving 18,424 links published nothing at all until the profiling spend
+landed, so the frontend had no grouping to show and no way to earn one. Only the
+profile-derived keys -- profile_tier, inferred_count, field_count, spec chips,
+and the service card's answers -- wait for a profile now.
 """
 
 from __future__ import annotations
@@ -40,10 +48,9 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
     if link is None:
         return draft
     entity: Entity = link.entity
-    if entity.profile_status not in _USABLE:
-        return draft
+    profiled = entity.profile_status in _USABLE
 
-    fields = winning_fields(entity)
+    fields = winning_fields(entity) if profiled else []
     tiers = [f.provenance for f in fields]
     dominant = dominant_tier(fields)
     inferred_count = sum(1 for t in tiers if t == "inferred")
@@ -57,24 +64,30 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
     if entity.summary_dv:
         draft.summary_dv = entity.summary_dv
 
-    draft.attrs = {
+    attrs = {
         **draft.attrs,
         "entity_id": entity.id,
         "entity_kind": entity.kind,
-        "profile_tier": dominant,
-        "inferred_count": inferred_count,
-        "field_count": len(fields),
         "identity_confidence": entity.identity_confidence,
     }
-
     card = dict(draft.card)
     card["entity_id"] = entity.id
-    card["profile_tier"] = dominant
-    card["inferred_count"] = inferred_count
-    card["field_count"] = len(fields)
     card["listing_count"] = entity.listing_count
     if entity.category_id:
         card["category_leaf"] = entity.category.label_en
+
+    if profiled:
+        # A trust label computed from no fields is not "grounded" or
+        # "inferred", it is absent. Writing an empty profile_tier onto every
+        # linked document would make the frontend render a caveat slot for a
+        # profile that does not exist.
+        attrs["profile_tier"] = dominant
+        attrs["inferred_count"] = inferred_count
+        attrs["field_count"] = len(fields)
+        card["profile_tier"] = dominant
+        card["inferred_count"] = inferred_count
+        card["field_count"] = len(fields)
+    draft.attrs = attrs
 
     if entity.kind == "service":
         draft.card = build_service_card(entity, fields, card)
@@ -83,6 +96,8 @@ def apply_entity(draft: DocumentDraft) -> DocumentDraft:
         card["title"] = strip_phones(entity.title_en or card.get("title", ""))
         if entity.brand:
             card["brand"] = entity.brand
+        # Only ever added, never blanked: an unprofiled entity has no chips of
+        # its own and must leave the ones the per-document extraction earned.
         chips = spec_chips(fields)
         if chips:
             card["spec_chips"] = chips

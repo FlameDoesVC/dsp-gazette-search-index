@@ -71,6 +71,16 @@ class Command(BaseCommand):
                 f"  ok={counts['ok']} needs_review={counts['needs_review']} "
                 f"failed={counts['failed']} skipped={counts['skipped']}"
             ))
+            usage = counts.get("usage") or {}
+            if usage.get("calls"):
+                per = usage["prompt_tokens"] / usage["calls"]
+                hit = usage["cache_hit_tokens"]
+                total_in = usage["prompt_tokens"] or 1
+                self.stdout.write(
+                    f"  {usage['calls']} calls, "
+                    f"{usage['prompt_tokens']:,} input tokens "
+                    f"({per:,.0f}/call, {100 * hit / total_in:.0f}% cache hit), "
+                    f"{usage['completion_tokens']:,} output tokens")
 
         # Deliberately does NOT clear stale_marked_at: reindex is the last
         # stage and the only one that clears the work ticket (spec 5.7).

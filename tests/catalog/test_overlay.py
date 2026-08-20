@@ -162,3 +162,67 @@ def test_a_wholly_inferred_profile_still_says_inferred(linked):
     card = apply_entity(draft()).card
     assert card["profile_tier"] == "inferred"
     assert card["inferred_count"] == card["field_count"] == 1
+
+
+@pytest.mark.django_db
+def test_a_link_publishes_without_a_profile(linked):
+    """The link and the profile are separate facts. The LINK knows this listing
+    is one of N for the same product and costs no model call; the PROFILE knows
+    what the product is and does. Gating both on the profile meant 18,424
+    resolved links published nothing at all, so the frontend had no grouping to
+    show and no way to earn one."""
+    linked.profile_status = "pending"
+    linked.listing_count = 34
+    linked.save(update_fields=["profile_status", "listing_count"])
+
+    out = apply_entity(draft())
+
+    assert out.attrs["entity_id"] == linked.id
+    assert out.attrs["entity_kind"] == "product"
+    assert out.card["entity_id"] == linked.id
+    assert out.card["listing_count"] == 34
+    assert out.card["category_leaf"] == "Mobile Phones"
+
+
+@pytest.mark.django_db
+def test_an_unprofiled_entity_claims_no_trust_label(linked):
+    """A tier computed from no fields is absent, not 'grounded'. Writing an
+    empty profile_tier onto every linked document would have the frontend
+    render a caveat slot for a profile that does not exist."""
+    linked.profile_status = "pending"
+    linked.save(update_fields=["profile_status"])
+
+    out = apply_entity(draft())
+
+    for key in ("profile_tier", "inferred_count", "field_count"):
+        assert key not in out.attrs, key
+        assert key not in out.card, key
+
+
+@pytest.mark.django_db
+def test_an_unprofiled_entity_does_not_blank_earned_spec_chips(linked):
+    """The enrichment overlay runs first and its chips came from this listing's
+    own text. An entity with nothing to say must not overwrite them."""
+    linked.profile_status = "pending"
+    linked.save(update_fields=["profile_status"])
+    d = draft()
+    d.card["spec_chips"] = ["128GB"]
+
+    out = apply_entity(d)
+
+    assert out.card["spec_chips"] == ["128GB"]
+
+
+@pytest.mark.django_db
+def test_an_unprofiled_service_still_renders_as_a_service(linked):
+    """Its doc_type is 'shopping' by design, so without the entity's kind the
+    frontend routes it to ShoppingCard and shows condition, price and brand --
+    every one a field a service does not have."""
+    linked.kind = "service"
+    linked.profile_status = "pending"
+    linked.save(update_fields=["kind", "profile_status"])
+
+    out = apply_entity(draft())
+
+    assert out.card["kind"] == "service"
+    assert out.card["services_offered"] == []
