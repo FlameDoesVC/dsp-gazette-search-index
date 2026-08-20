@@ -149,19 +149,17 @@ Of the 4 remaining misses, 3 should not be identifiers at all
 numbers joined by a slash) and 1 is a genuine identifier the translation dropped.
 **One true miss in 42.**
 
-### 3.5 Kind is usually stated in the text
+### 3.5 Kind is not determined, deliberately
 
-Of 31 identifiers in translated bodies, 13 are immediately preceded by a label:
+Of 31 identifiers in translated bodies, 13 are preceded by a label
+(`project number`, `bid committee in meeting number`, `job opportunity number`)
+and 18 are not, so kind is derivable for some and unknown for the rest.
 
-```
-project number        announcement number       in response to announcement number
-authority number      bid committee in meeting number
-job opportunity number     has been granted license number
-```
-
-The other 18 have none. So kind is derivable for those that state it and unknown
-for the rest -- which is acceptable because kind is display metadata only. The
-link searches the number; an unlabelled identifier links exactly as well.
+**It is not derived at all.** Correlating a number to the documents carrying it is
+the entire feature; naming the number adds a label vocabulary, a proximity window
+and a class of mislabelling bugs -- one of which shipped and had to be fixed, a
+60-character window letting a previous line's `Project Number:` bleed forward --
+for nothing a reader can act on. The link searches the number either way.
 
 ### 3.6 What cannot be used as a guard
 
@@ -177,6 +175,8 @@ written in Thaana. Measured before relying on it.
 specified, and section 3.4 is why: translation gives us a free, exact oracle for
 "which tokens are identifiers", and it outperforms asking a model to find them.
 
+Kind is not recorded. See section 3.5.
+
 ```
 candidates(text) = { token for token in text
                      if "/" in token
@@ -191,20 +191,7 @@ identifiers(doc) = { c for c in candidates(thaana_text)
 ```
 
 The display form is the Thaana-side spelling, because that is the source of
-record. Kind comes from a curated label vocabulary matched against the words
-immediately preceding the identifier in the **translated** text, since the labels
-are English there:
-
-| label pattern | kind |
-|---|---|
-| `project number` | `project` |
-| `announcement number`, `iulaan number` | `announcement` |
-| `bid committee`, `meeting number` | `bid_committee` |
-| `job opportunity number` | `job` |
-| `license number`, `authority number` | `license` |
-| `ref`, `reference` | `reference` |
-| no label matched | `other` |
-
+record. 
 Three consequences of doing it this way:
 
 - **Nothing can be invented.** A candidate exists only if it appears in both
@@ -255,14 +242,12 @@ class DocumentIdentifier(models.Model):
     source_key = models.CharField(max_length=128)
     value_raw = models.CharField(max_length=128)     # for display
     value_key = models.CharField(max_length=160)     # for matching, section 5
-    kind = models.CharField(max_length=24, choices=KINDS)
-    label_raw = models.CharField(max_length=64, blank=True)
     is_own = models.BooleanField(default=False)      # the document's own number
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [UniqueConstraint(
-            fields=["source", "source_key", "value_key", "kind"],
+            fields=["source", "source_key", "value_key"],
             name="uniq_identifier_occurrence")]
         indexes = [Index(fields=["value_key"], name="identifier_value_key"),
                    Index(fields=["source", "source_key"], name="identifier_doc")]
@@ -302,8 +287,8 @@ above lexical matches, because a reader who pastes a reference number wants that
 number, not documents that happen to share its digits. A query that is not
 identifier-shaped never touches this path, so ordinary search is unaffected.
 
-**Display.** The detail response carries the document's identifiers with
-`value_raw` and `kind`. The frontend renders each as a link to
+**Display.** The detail response carries the document's identifiers as
+`value_raw` plus `is_own`. The frontend renders each as a link to
 `/search?q=<value_raw>`, and search resolves it through `value_key`, so clicking
 the `FMB2` form finds the `FBM2` document. Rendering the raw form keeps the page
 faithful to the notice while matching stays tolerant.
@@ -404,8 +389,7 @@ corrects.
 - Filters: a URL (`www.csc.gov.mv/download/2024/84/Annex`), a CSS class
   (`col-md-12`) and two slash-joined phone numbers (`7924894/3315555`) are all
   rejected.
-- Kind: `BC-171/2026/094` classified `bid_committee` from its label; an
-  identifier with no label gets `other` and still links.
+- No kind is stored: `extract` returns `value_raw` and `value_key` only.
 - A document with no translated body yields exactly its own scraped number.
 - Normalization: the four pairs in section 5, both directions.
 - Retrieval: searching either spelling of the announcement number returns the
@@ -418,7 +402,7 @@ corrects.
   token-level alias; and a correction whose two sides have different token counts
   writes no alias at all.
 
-Measurements to record: identifiers per document by kind, split by whether the
+Measurements to record: identifiers per document, split by whether the
 document has a translated body; recall against a hand-checked sample (90.5%
 measured on 42 candidates, with 1 true miss); the share of cited numbers that
 resolve to another document in the corpus, which is the linking payoff and the
@@ -449,9 +433,6 @@ P10 task 3's gazetteer reads `Category` labels and is unaffected.
   which means the gazette scraper's markup stripping is incomplete. The `/`
   filter sidesteps it here, but it is a data-quality defect in its own right and
   worth a separate look.
-- **`kind` is a closed enum seeded from one document.** Expect additions once the
-  full gazette corpus is ingested; the review queue for that is the count of
-  `kind="other"` rows carrying a non-empty `label_raw`.
 - **The identifier path assumes gazette shapes.** If iBay ever carries reference
   numbers, `is_own` and the scraped-field shortcut need revisiting.
 - **DuckDuckGo is a single point of failure** for corrections. The table is the

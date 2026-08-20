@@ -1,7 +1,7 @@
 import pytest
 
-from search.identifiers import (candidates, classify_kind, extract,
-                                looks_like_identifier, value_key)
+from search.identifiers import (candidates, extract, looks_like_identifier,
+                                value_key)
 
 # Real strings from iulaan 408123 and its neighbours. Every case below is a
 # thing the corpus actually contains, not an invented example.
@@ -126,17 +126,6 @@ def test_extract_uses_the_thaana_spelling_for_display():
     assert [r["value_raw"] for r in rows] == ["171-Y(FBM2)/IUL/2026/166"]
 
 
-def test_extract_labels_the_kind_from_the_translated_text():
-    by_key = {r["value_key"]: r for r in extract(DV, EN)}
-    assert by_key[value_key("PC-171/2026/T327")]["kind"] == "project"
-    assert by_key[value_key("BC-171/2026/094")]["kind"] == "bid_committee"
-    assert by_key[value_key("171-Y(FMB2)/IUL/2026/166")]["kind"] == "announcement"
-
-
-def test_an_unlabelled_identifier_is_other_and_still_extracted():
-    rows = extract("PC-171/2026/T327", "see PC-171/2026/T327 attached")
-    assert len(rows) == 1
-    assert rows[0]["kind"] == "other"
 
 
 def test_extract_is_empty_without_a_translation():
@@ -155,22 +144,6 @@ def test_extract_deduplicates_repeated_mentions():
 # classify_kind and the query gate
 # --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("before,expected", [
-    ("Project Number:", "project"),
-    ("Announcement Number:", "announcement"),
-    ("in response to announcement number", "announcement"),
-    ("This decision was made by the Bid Committee in meeting number",
-     "bid_committee"),
-    ("Job Opportunity Number", "job"),
-    ("has been granted license number", "license"),
-    ("Authority Number", "license"),
-    ("Civil Court Thinadhoo Maldives Ref", "reference"),
-    ("and then some prose that names nothing", "other"),
-    ("", "other"),
-])
-def test_classify_kind(before, expected):
-    assert classify_kind(before) == expected
-
 
 @pytest.mark.parametrize("q,expected", [
     ("PC-171/2026/T327", True),
@@ -184,3 +157,13 @@ def test_classify_kind(before, expected):
 ])
 def test_looks_like_identifier(q, expected):
     assert looks_like_identifier(q) is expected
+
+
+def test_extract_reports_only_the_value_and_its_key():
+    """Kind is deliberately not determined. Correlating the number to the
+    document is the whole feature; naming it bought a label vocabulary, a
+    proximity window and a class of mislabelling bugs for nothing a reader can
+    use."""
+    rows = extract("PC-171/2026/T327", "Project Number: PC-171/2026/T327")
+    assert rows == [{"value_raw": "PC-171/2026/T327",
+                     "value_key": value_key("PC-171/2026/T327")}]

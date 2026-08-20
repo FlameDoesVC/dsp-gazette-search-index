@@ -59,10 +59,10 @@ The 44.7% was never translation losing numbers. It was `19/2014` against
 is a URL and `7924894/3315555` is two phone numbers joined by a slash -- leaving
 **one true miss in 42**.
 
-**Kinds.** Of 31 identifiers in translated bodies, 13 are preceded by a label
-(`project number`, `announcement number`, `bid committee in meeting number`,
-`job opportunity number`, `has been granted license number`, `authority number`,
-`ref`). The other 18 have none and get `other`, which links exactly as well.
+**Kinds are not recorded.** 13 of 31 identifiers state their kind in the text and
+18 do not, but naming the number buys nothing a reader can act on, so the label
+vocabulary was removed along with the proximity-window bug it caused. Correlating
+the number to its documents is the whole feature.
 
 **Identifier shapes already scraped**, present on 121 of 125 iulaan:
 
@@ -78,7 +78,7 @@ is a URL and `7924894/3315555` is two phone numbers joined by a slash -- leaving
 ```
 search/
   identifiers.py                  NEW  value_key, candidates, extract,
-                                  classify_kind, looks_like_identifier
+                                  looks_like_identifier
   models.py                       MODIFIED: DocumentIdentifier
   migrations/00XX_documentidentifier.py
   admin.py                        MODIFIED: DocumentIdentifierAdmin
@@ -112,12 +112,10 @@ source-agnostic. Putting the pair in different apps would split one contract.
 - Consumes: nothing.
 - Produces:
   ```python
-  KINDS: list[tuple[str, str]]
   value_key(raw: str) -> str
   candidates(text: str) -> dict[str, str]          # value_key -> display form
-  classify_kind(preceding_text: str) -> str
   extract(thaana_text: str, translated_text: str) -> list[dict]
-      # [{"value_raw": str, "value_key": str, "kind": str, "label_raw": str}]
+      # [{"value_raw": str, "value_key": str}]
   looks_like_identifier(q: str) -> bool
   ```
 
@@ -128,8 +126,8 @@ source-agnostic. Putting the pair in different apps would split one contract.
 ```python
 import pytest
 
-from search.identifiers import (candidates, classify_kind, extract,
-                                looks_like_identifier, value_key)
+from search.identifiers import (candidates, extract, looks_like_identifier,
+                                value_key)
 
 # Real strings from iulaan 408123 and its neighbours. Every case below is a
 # thing the corpus actually contains, not an invented example.
@@ -254,17 +252,6 @@ def test_extract_uses_the_thaana_spelling_for_display():
     assert [r["value_raw"] for r in rows] == ["171-Y(FBM2)/IUL/2026/166"]
 
 
-def test_extract_labels_the_kind_from_the_translated_text():
-    by_key = {r["value_key"]: r for r in extract(DV, EN)}
-    assert by_key[value_key("PC-171/2026/T327")]["kind"] == "project"
-    assert by_key[value_key("BC-171/2026/094")]["kind"] == "bid_committee"
-    assert by_key[value_key("171-Y(FMB2)/IUL/2026/166")]["kind"] == "announcement"
-
-
-def test_an_unlabelled_identifier_is_other_and_still_extracted():
-    rows = extract("PC-171/2026/T327", "see PC-171/2026/T327 attached")
-    assert len(rows) == 1
-    assert rows[0]["kind"] == "other"
 
 
 def test_extract_is_empty_without_a_translation():
@@ -280,24 +267,8 @@ def test_extract_deduplicates_repeated_mentions():
 
 
 # --------------------------------------------------------------------------
-# classify_kind and the query gate
+# the query gate
 # --------------------------------------------------------------------------
-
-@pytest.mark.parametrize("before,expected", [
-    ("Project Number:", "project"),
-    ("Announcement Number:", "announcement"),
-    ("in response to announcement number", "announcement"),
-    ("This decision was made by the Bid Committee in meeting number",
-     "bid_committee"),
-    ("Job Opportunity Number", "job"),
-    ("has been granted license number", "license"),
-    ("Authority Number", "license"),
-    ("Civil Court Thinadhoo Maldives Ref", "reference"),
-    ("and then some prose that names nothing", "other"),
-    ("", "other"),
-])
-def test_classify_kind(before, expected):
-    assert classify_kind(before) == expected
 
 
 @pytest.mark.parametrize("q,expected", [
@@ -312,6 +283,16 @@ def test_classify_kind(before, expected):
 ])
 def test_looks_like_identifier(q, expected):
     assert looks_like_identifier(q) is expected
+
+
+def test_extract_reports_only_the_value_and_its_key():
+    """Kind is deliberately not determined. Correlating the number to the
+    document is the whole feature; naming it bought a label vocabulary, a
+    proximity window and a class of mislabelling bugs for nothing a reader can
+    use."""
+    rows = extract("PC-171/2026/T327", "Project Number: PC-171/2026/T327")
+    assert rows == [{"value_raw": "PC-171/2026/T327",
+                     "value_key": value_key("PC-171/2026/T327")}]
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
@@ -338,26 +319,9 @@ from __future__ import annotations
 
 import re
 
-KINDS = [
-    ("project", "project"),
-    ("announcement", "announcement"),
-    ("bid_committee", "bid committee"),
-    ("job", "job opportunity"),
-    ("license", "license or authority"),
-    ("reference", "reference"),
-    ("invoice", "invoice"),
-    ("contract", "contract"),
-    ("other", "other"),
-]
-
-# The alternation matters. Without the first branch, a leading `(IUL)` glues onto
-# the number -- `(IUL)171-Y(FBM2)/IUL/2026/146` tokenizes as `IUL)171-...`, whose
-# extra letters change value_key so it no longer matches the bare form in the
-# translation. Consuming `(IUL)` as its own token (rejected: no digits) leaves the
-# number intact, and an internal code like `(FBM2)` is unaffected because it never
-# leads. The `:` in the second branch keeps a URL as ONE token: without it
-# `https://x/1/2` splits at the colon and the tail no longer contains `https:`,
-# so it slips past _URLISH.
+# The leading alternative absorbs a parenthesized type prefix such as "(IUL)"
+# so it cannot glue onto the number after it and change that number's key. The
+# ":" in the token run admits scheme URLs so _URLISH can reject them whole.
 _TOKEN = re.compile(r"\([A-Za-z]+\)|[A-Za-z0-9][A-Za-z0-9()/.\-:]*")
 _TRIM = ".,);:'\""
 _MIN_LEN = 7
@@ -371,23 +335,6 @@ _URLISH = re.compile(r"(?:www\.|https?:)", re.I)
 _PHONE = r"(?:\+?960[\s-]?)?(?:[79]\d{6}|[36]\d{6})"
 _PHONE_PAIR = re.compile(rf"^{_PHONE}(?:\s*/\s*{_PHONE})+$")
 
-# Labels, longest and most specific first: 'meeting number' must be tested
-# before the bare 'number' forms, and 'announcement number' matches inside
-# 'in response to announcement number' without a separate rule.
-_LABEL_RULES: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"bid\s+committee|meeting\s+number", re.I), "bid_committee"),
-    (re.compile(r"project\s+number", re.I), "project"),
-    (re.compile(r"job\s+opportunit\w*\s+number", re.I), "job"),
-    (re.compile(r"(?:licen[cs]e|authority)\s+number", re.I), "license"),
-    (re.compile(r"(?:announcement|iulaan)\s+number", re.I), "announcement"),
-    (re.compile(r"invoice\s+number", re.I), "invoice"),
-    (re.compile(r"contract\s+number", re.I), "contract"),
-    (re.compile(r"\bref(?:erence)?\.?\s*$", re.I), "reference"),
-]
-
-# How far back to look for the label. One line of prose; more than this and the
-# label belongs to something else.
-LABEL_WINDOW = 60
 
 
 def value_key(raw: str) -> str:
@@ -432,63 +379,27 @@ def candidates(text: str) -> dict[str, str]:
     return out
 
 
-def _positioned(text: str) -> list[tuple[str, int]]:
-    out = []
-    for match in _TOKEN.finditer(text or ""):
-        token = match.group(0).strip(_TRIM)
-        if _is_candidate(token):
-            out.append((value_key(token), match.start()))
-    return out
-
-
-def classify_kind(preceding_text: str) -> str:
-    """The kind of identifier, from the words in front of it.
-
-    Measured: 13 of 31 identifiers in translated bodies state their kind this
-    way and 18 do not. `other` is a perfectly good answer -- the link searches
-    the number, so kind is display metadata.
-    """
-    window = re.sub(r"\s+", " ", (preceding_text or ""))[-LABEL_WINDOW:]
-    # Rightmost match wins, not first-rule-in-list. The window is 60 characters
-    # and identifiers sit close together, so a previous line's `Project Number:`
-    # bleeds into the next identifier's window and mislabels it. The label
-    # NEAREST the identifier is the one that names it.
-    best_kind, best_pos = "other", -1
-    for pattern, kind in _LABEL_RULES:
-        match = pattern.search(window)
-        if match and match.start() > best_pos:
-            best_kind, best_pos = kind, match.start()
-    return best_kind
 
 
 def extract(thaana_text: str, translated_text: str) -> list[dict]:
     """Identifiers common to both sides of one document.
 
     The display form comes from the Thaana side, which is the source of record.
-    The translated side supplies two things and nothing else: proof the token
-    survived translation, and the English label that gives the kind.
+    The translated side supplies exactly one thing: proof the token survived
+    translation, which is what makes it an identifier rather than prose.
+
+    What kind of number each one is -- project, invoice, bid committee -- is
+    deliberately not determined. Correlating the number to the document it was
+    found in is the entire feature; naming it added a label vocabulary, a
+    proximity window and a class of mislabelling bugs for no gain in what a
+    reader can do.
     """
-    english = _positioned(translated_text)
-    english_keys = {key for key, _pos in english}
+    english_keys = set(candidates(translated_text))
     if not english_keys:
         return []
-
-    labels: dict[str, tuple[str, str]] = {}
-    for key, pos in english:
-        if key in labels and labels[key][0] != "other":
-            continue
-        before = (translated_text or "")[max(0, pos - LABEL_WINDOW):pos]
-        labels[key] = (classify_kind(before),
-                       re.sub(r"\s+", " ", before).strip()[-40:])
-
-    rows = []
-    for key, display in candidates(thaana_text).items():
-        if key not in english_keys:
-            continue
-        kind, label_raw = labels.get(key, ("other", ""))
-        rows.append({"value_raw": display, "value_key": key,
-                     "kind": kind, "label_raw": label_raw})
-    return rows
+    return [{"value_raw": display, "value_key": key}
+            for key, display in candidates(thaana_text).items()
+            if key in english_keys]
 
 
 def looks_like_identifier(q: str) -> bool:
@@ -505,7 +416,7 @@ def looks_like_identifier(q: str) -> bool:
 - [ ] **Step 4: Run the tests until they pass**
 
 Run: `venv/bin/python -m pytest tests/search/test_identifiers.py -v`
-Expected: PASS, 30 tests.
+Expected: PASS, 26 tests.
 
 - [ ] **Step 5: Verify against the live corpus**
 
@@ -521,7 +432,7 @@ i = Iulaan.objects.get(id=408123)
 rows = extract(f"{i.title}\n{i.body or ''}",
                f"{i.translated_title or ''}\n{i.translated_body or ''}")
 for r in rows:
-    print(f"  {r['kind']:14s} {r['value_raw']}")
+    print(f"  {r['value_raw']}")
 assert len(rows) == 4, f"expected 4 identifiers, got {len(rows)}"
 EOF
 ```
@@ -545,7 +456,7 @@ jj commit -m "identifiers: deterministic extraction from the translation invaria
 
 **Interfaces:**
 - Consumes: `KINDS` from task 1.
-- Produces: `DocumentIdentifier` with `(source, source_key, value_raw, value_key, kind, label_raw, is_own)`.
+- Produces: `DocumentIdentifier` with `(source, source_key, value_raw, value_key, is_own)`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -567,7 +478,7 @@ def test_the_same_identifier_twice_in_one_document_is_one_row():
                 DocumentIdentifier.objects.create(
                     source="gazette", source_key="408123",
                     value_raw="PC-171/2026/T327",
-                    value_key=value_key("PC-171/2026/T327"), kind="project")
+                    value_key=value_key("PC-171/2026/T327"))
         except IntegrityError:
             pass
     assert DocumentIdentifier.objects.count() == 1
@@ -580,22 +491,27 @@ def test_two_documents_can_share_one_identifier():
     for doc in ("408123", "408150"):
         DocumentIdentifier.objects.create(
             source="gazette", source_key=doc, value_raw="PC-171/2026/T327",
-            value_key=key, kind="project")
+            value_key=key)
     assert DocumentIdentifier.objects.filter(value_key=key).count() == 2
 
 
 @pytest.mark.django_db
-def test_one_document_can_carry_the_same_number_under_two_kinds():
-    """A number can be both the document's own announcement number and a
-    reference cited in its body; the unique constraint includes kind."""
+def test_the_same_number_stored_twice_for_one_document_stays_one_row():
+    """With kind gone the occurrence is (document, value_key), so a number that
+    is both the document's own reference and cited in its body is one row. That
+    is correct: the link goes to the same place either way."""
     key = value_key("171-Y(FBM2)/IUL/2026/166")
     DocumentIdentifier.objects.create(
-        source="gazette", source_key="408123", value_raw="171-Y(FBM2)/IUL/2026/166",
-        value_key=key, kind="announcement", is_own=True)
-    DocumentIdentifier.objects.create(
-        source="gazette", source_key="408123", value_raw="171-Y(FMB2)/IUL/2026/166",
-        value_key=key, kind="reference")
-    assert DocumentIdentifier.objects.filter(source_key="408123").count() == 2
+        source="gazette", source_key="408123",
+        value_raw="171-Y(FBM2)/IUL/2026/166", value_key=key, is_own=True)
+    try:
+        with transaction.atomic():
+            DocumentIdentifier.objects.create(
+                source="gazette", source_key="408123",
+                value_raw="171-Y(FMB2)/IUL/2026/166", value_key=key)
+    except IntegrityError:
+        pass
+    assert DocumentIdentifier.objects.filter(source_key="408123").count() == 1
 
 
 @pytest.mark.django_db
@@ -631,8 +547,6 @@ class DocumentIdentifier(models.Model):
     its siblings.
     """
 
-    from search.identifiers import KINDS as IDENTIFIER_KINDS
-
     source = models.CharField(max_length=32)
     source_key = models.CharField(max_length=128)
     # What the document says, for display. The Thaana side wins: it is the
@@ -642,9 +556,6 @@ class DocumentIdentifier(models.Model):
     # its own number FBM2 in one field and FMB2 in another, so the raw string is
     # not a usable key.
     value_key = models.CharField(max_length=160)
-    kind = models.CharField(max_length=24, choices=IDENTIFIER_KINDS,
-                            default="other")
-    label_raw = models.CharField(max_length=64, blank=True)
     # True for the document's own reference number, which comes from the scraped
     # field and needs no translation.
     is_own = models.BooleanField(default=False)
@@ -653,7 +564,7 @@ class DocumentIdentifier(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["source", "source_key", "value_key", "kind"],
+                fields=["source", "source_key", "value_key"],
                 name="uniq_identifier_occurrence")
         ]
         indexes = [
@@ -662,12 +573,8 @@ class DocumentIdentifier(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.value_raw} [{self.kind}]"
+        return f"{self.source_key}: {self.value_raw}"
 ```
-
-Move the `from search.identifiers import KINDS` to the module's import block if
-the class-body import trips a linter; it is written inline here only to keep the
-model self-describing.
 
 - [ ] **Step 4: Register it in the admin**
 
@@ -679,9 +586,8 @@ class DocumentIdentifierAdmin(admin.ModelAdmin):
     """Sorted so the most-shared numbers surface first: those are the threads
     the feature exists to expose, and a wrong one is most visible there."""
 
-    list_display = ("value_raw", "kind", "source", "source_key", "is_own",
-                    "label_raw")
-    list_filter = ("kind", "source", "is_own")
+    list_display = ("value_raw", "source", "source_key", "is_own")
+    list_filter = ("source", "is_own")
     search_fields = ("value_raw", "value_key", "source_key")
     ordering = ("value_key", "source_key")
 ```
@@ -745,10 +651,9 @@ def iulaan(db):
 @pytest.mark.django_db
 def test_the_command_stores_the_extracted_identifiers(iulaan):
     call_command("extract_identifiers", "--source", "gazette")
-    rows = {r.value_raw: r.kind for r in DocumentIdentifier.objects.all()}
-    assert rows["PC-171/2026/T327"] == "project"
-    assert rows["BC-171/2026/094"] == "bid_committee"
-    assert rows["171-Y(FBM2)/IUL/2026/146"] == "announcement"
+    stored = {r.value_raw for r in DocumentIdentifier.objects.all()}
+    assert {"PC-171/2026/T327", "BC-171/2026/094",
+            "171-Y(FBM2)/IUL/2026/146"} <= stored
 
 
 @pytest.mark.django_db
@@ -765,7 +670,6 @@ def test_the_scraped_number_is_stored_even_without_a_translation(db):
     row = DocumentIdentifier.objects.get(source_key="409000")
     assert row.value_raw == "674-A/2026/46"
     assert row.is_own is True
-    assert row.kind == "announcement"
 
 
 @pytest.mark.django_db
@@ -853,7 +757,7 @@ def identifiers_for_iulaan(iulaan) -> list[dict]:
     own = (iulaan.additional_info or {}).get(_K_REFERENCE, "").strip()
     if own:
         rows.append({"value_raw": own, "value_key": value_key(own),
-                     "kind": "announcement", "label_raw": "", "is_own": True})
+                     "is_own": True})
 
     seen = {r["value_key"] for r in rows}
     thaana = f"{iulaan.title or ''}\n{iulaan.body or ''}"
@@ -887,7 +791,6 @@ class Command(BaseCommand):
               .only("id", "title", "body", "translated_title",
                     "translated_body", "additional_info"))
         seen_docs = written = translated_docs = 0
-        by_kind: dict[str, int] = {}
 
         for iulaan in qs.iterator(chunk_size=500):
             if opts["limit"] is not None and seen_docs >= opts["limit"]:
@@ -897,16 +800,14 @@ class Command(BaseCommand):
                 translated_docs += 1
             rows = identifiers_for_iulaan(iulaan)
             for row in rows:
-                by_kind[row["kind"]] = by_kind.get(row["kind"], 0) + 1
             if opts["dry_run"] or not rows:
                 continue
             with transaction.atomic():
                 for row in rows:
                     DocumentIdentifier.objects.update_or_create(
                         source="gazette", source_key=str(iulaan.id),
-                        value_key=row["value_key"], kind=row["kind"],
+                        value_key=row["value_key"],
                         defaults={"value_raw": row["value_raw"][:128],
-                                  "label_raw": row["label_raw"][:64],
                                   "is_own": row["is_own"]},
                     )
                     written += 1
@@ -914,8 +815,6 @@ class Command(BaseCommand):
         self.stdout.write(
             f"{seen_docs} documents ({translated_docs} translated), "
             f"{written} identifier rows")
-        for kind, n in sorted(by_kind.items(), key=lambda kv: -kv[1]):
-            self.stdout.write(f"   {kind:14s} {n}")
         if opts["dry_run"]:
             self.stdout.write(self.style.WARNING("dry run; nothing written"))
 ```
@@ -975,7 +874,7 @@ def indexed(db):
     for doc in (a, b):
         DocumentIdentifier.objects.create(
             source="gazette", source_key=doc.source_key,
-            value_raw="PC-171/2026/T327", value_key=key, kind="project")
+            value_raw="PC-171/2026/T327", value_key=key)
     return a, b, c
 
 
@@ -994,7 +893,7 @@ def test_either_spelling_of_one_number_finds_the_same_documents(indexed):
     key = value_key("171-Y(FBM2)/IUL/2026/166")
     DocumentIdentifier.objects.create(
         source="gazette", source_key=a.source_key,
-        value_raw="171-Y(FBM2)/IUL/2026/166", value_key=key, kind="announcement")
+        value_raw="171-Y(FBM2)/IUL/2026/166", value_key=key)
     for spelling in ("171-Y(FBM2)/IUL/2026/166", "171-Y(FMB2)/IUL/2026/166"):
         assert a.source_key in {r.source_key for r in search(spelling)}
 
@@ -1135,12 +1034,12 @@ def doc(db):
         url="https://gazette.gov.mv/408123", title_en="Award of contract")
     DocumentIdentifier.objects.create(
         source="gazette", source_key="408123", value_raw="171-Y(FBM2)/IUL/2026/166",
-        value_key=value_key("171-Y(FBM2)/IUL/2026/166"), kind="announcement",
+        value_key=value_key("171-Y(FBM2)/IUL/2026/166"),
         is_own=True)
     DocumentIdentifier.objects.create(
         source="gazette", source_key="408123", value_raw="PC-171/2026/T327",
-        value_key=value_key("PC-171/2026/T327"), kind="project",
-        label_raw="Project Number")
+        value_key=value_key("PC-171/2026/T327"),
+        )
     return d
 
 
@@ -1154,7 +1053,7 @@ def test_the_detail_response_carries_the_identifiers(api, doc):
     d.save(update_fields=["doc_type"])
     body = api.get(f"/api/v1/documents/{d.id}").json()
     got = {i["value_raw"]: i for i in body["identifiers"]}
-    assert got["PC-171/2026/T327"]["kind"] == "project"
+    assert got["PC-171/2026/T327"]["is_own"] is False
     assert got["171-Y(FBM2)/IUL/2026/166"]["is_own"] is True
 
 
@@ -1193,8 +1092,6 @@ class IdentifierOut(Schema):
     """
 
     value_raw: str
-    kind: str
-    label_raw: str = ""
     is_own: bool = False
 ```
 
@@ -1213,11 +1110,10 @@ In `api/routers/documents.py::detail`, before the return:
     # Own number first, then citations, so a reader sees what this document IS
     # before what it refers to.
     identifiers = [
-        {"value_raw": i.value_raw, "kind": i.kind,
-         "label_raw": i.label_raw, "is_own": i.is_own}
+        {"value_raw": i.value_raw, "is_own": i.is_own}
         for i in DocumentIdentifier.objects
         .filter(source=doc.source, source_key=doc.source_key)
-        .order_by("-is_own", "kind", "value_raw")
+        .order_by("-is_own", "value_raw")
     ]
 ```
 
@@ -1306,7 +1202,7 @@ Expected: the documents carrying that number, ranked first.
 `docs/superpowers/measurements/2026-08-identifiers.md`, with:
 
 - documents processed, and how many had a translated body
-- identifier rows by kind, and the own-number vs citation split
+- identifier rows, and the own-number vs citation split
 - **identifiers shared across more than one document**, the payoff figure
 - recall against a hand-checked sample of 20 documents: for each, the
   identifiers a human finds by reading, against what the extractor stored
@@ -1340,7 +1236,7 @@ jj commit -m "identifiers: gazette indexed, backfill run, measurements recorded"
 ## Self-Review
 
 **Spec coverage.** Section 3.4 (the invariant method) is task 1. Section 3.5
-(kinds from labels) is task 1's `classify_kind`. Section 4 (extraction, filters,
+(kinds deliberately NOT derived) is honoured by their absence. Section 4 (extraction, filters,
 the scraped-number shortcut) is tasks 1 and 3. Section 5 (`value_key`) is task 1.
 Section 6 (`DocumentIdentifier`) is task 2. Section 7 (retrieval and display) is
 tasks 4 and 5. Section 9's sequencing dependency is task 3's docstring and task
@@ -1356,9 +1252,9 @@ design (spec 8.4: a news result links straight to the source), and gazette
 documents are `news` -- see the open question below.
 
 **Type consistency.** `value_key` returns `str` everywhere. `extract` returns
-dicts with `value_raw`, `value_key`, `kind`, `label_raw`; `identifiers_for_iulaan`
-adds `is_own` to each. `KINDS` is the choices list in `search/identifiers.py` and
-is imported by the model rather than duplicated.
+dicts with `value_raw` and `value_key` only; `identifiers_for_iulaan` adds
+`is_own` to each. There is no `kind` anywhere -- if a task seems to want one, the
+task is stale.
 
 **One thing the implementer must resolve, and it is not cosmetic.**
 `api/routers/documents.py:18` restricts the detail endpoint to
