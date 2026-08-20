@@ -389,3 +389,56 @@ class SourceCategoryMap(models.Model):
 
     def __str__(self):
         return f"{self.source}: {' > '.join(self.path)}"
+
+
+class FieldTranslation(models.Model):
+    """One machine translation of one field of one document, kept out of the way.
+
+    Translations used to live only in SearchDocument, which erased them. The
+    index is REBUILT by `reindex`: every field in indexing._UPDATE_FIELDS is
+    recomputed from the adapter plus the draft overlays, so a value written
+    directly into the table survives exactly until the next pass. It failed
+    silently, too -- the adapter simply rebuilt `summary_dv` as empty and no
+    error was raised anywhere. Gazette lost 149 English titles that way; iBay
+    would have lost ~20,000 Dhivehi titles and every translated summary.
+
+    Gazette had somewhere to put them (Iulaan.translated_title, which its
+    adapter reads) and iBay has nothing, and adding translated_* columns to
+    tables that mirror scraped data is the wrong shape: a machine translation is
+    derived, not scraped. So this is a sidecar applied as a draft overlay, which
+    is how enrichment and the catalog already reach the index.
+
+    `source_hash` is the hash of the text that WAS TRANSLATED, not of this
+    value. When a seller edits a listing the English changes, its hash stops
+    matching, and the stale Dhivehi is ignored rather than being shown against
+    new text.
+    """
+
+    source = models.CharField(max_length=32)
+    source_key = models.CharField(max_length=128)
+    # The field this value belongs in, e.g. `summary_dv`.
+    target_field = models.CharField(max_length=32)
+    # The field it was translated FROM, e.g. `summary_en`. Kept so the staleness
+    # check knows which text has to still match.
+    source_field = models.CharField(max_length=32)
+    source_hash = models.CharField(max_length=64)
+    value = models.TextField()
+
+    model_name = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "source_key", "target_field"],
+                name="field_translation_unique",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["source", "source_key"],
+                         name="field_translation_doc"),
+        ]
+
+    def __str__(self):
+        return f"{self.source}:{self.source_key}.{self.target_field}"

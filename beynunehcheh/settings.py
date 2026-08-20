@@ -350,6 +350,10 @@ REPORT_RATE_WINDOW = int(os.getenv("REPORT_RATE_WINDOW", "3600"))
 # Draft overlays run between adapter.to_document() and upsert. `search` knows
 # only these dotted paths; it never imports `enrich`.
 SEARCH_DRAFT_OVERLAYS = [
+    # First, because a machine translation is the weakest claim here and must
+    # lose to anything extracted from the document or built from every listing
+    # of the thing. It only fills empty fields, never replaces one.
+    "search.translations.apply_translations",
     "enrich.overlay.apply_enrichment",
     # After enrichment: an entity profile is built from every listing of the
     # thing and must win over a single listing's extraction.

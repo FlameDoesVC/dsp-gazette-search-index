@@ -31,6 +31,11 @@ from django.db.models import Q
 
 from search.indexing import _rebuild_vectors
 from search.models import SearchDocument
+# Writing only into SearchDocument is what made these translations disposable:
+# reindex recomputes every field in _UPDATE_FIELDS, so the next pass erased
+# them without a word. `remember` keeps a copy the translations overlay can put
+# back. See search/models.py::FieldTranslation.
+from search.translations import remember
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +69,8 @@ class Command(BaseCommand):
             | (Q(summary_dv="") & ~Q(summary_en=""))
             | (Q(summary_en="") & ~Q(summary_dv=""))
             | ~Q(attrs={})
-        ).only("id", "title_en", "title_dv", "summary_en", "summary_dv", "attrs")
+        ).only("id", "source", "source_key", "title_en", "title_dv",
+               "summary_en", "summary_dv", "attrs")
         if opts["limit"]:
             qs = qs[: opts["limit"]]
 
@@ -121,10 +127,16 @@ class Command(BaseCommand):
             for en_field, dv_field in PAIRS:
                 en, dv = getattr(doc, en_field), getattr(doc, dv_field)
                 if en and not dv:
-                    setattr(doc, dv_field, convert(en, "dv")[:512])
+                    value = convert(en, "dv")[:512]
+                    setattr(doc, dv_field, value)
+                    remember(doc.source, doc.source_key, target_field=dv_field,
+                             source_field=en_field, origin_text=en, value=value)
                     touched = True
                 elif dv and not en:
-                    setattr(doc, en_field, convert(dv, "en")[:512])
+                    value = convert(dv, "en")[:512]
+                    setattr(doc, en_field, value)
+                    remember(doc.source, doc.source_key, target_field=en_field,
+                             source_field=dv_field, origin_text=dv, value=value)
                     touched = True
             touched = fill_attrs(doc) or touched
             if touched:
