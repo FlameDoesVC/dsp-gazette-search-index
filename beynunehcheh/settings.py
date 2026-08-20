@@ -249,17 +249,30 @@ ENRICH_PROVIDER = os.getenv("ENRICH_PROVIDER", "deepseek")
 ENRICH_MODEL = os.getenv("ENRICH_MODEL", "deepseek-v4-flash")
 ENRICH_MODEL_ESCALATION = os.getenv("ENRICH_MODEL_ESCALATION", "deepseek-v4-pro")
 ENRICH_MODEL_LOCAL = os.getenv("ENRICH_MODEL_LOCAL", "qwen3.5:4b")
-# Ollama defaults to 4,096 whatever the model advertises, and truncates a longer
-# prompt silently rather than failing. Set explicitly so the ceiling is visible
-# and tunable, but left AT the default: raising it to 8,192 on the current GPU
-# made gemmatranslate:12b four times slower (26.8s vs 6.5s per document) and
-# returned five empty responses out of sixteen, which is a worse failure than
-# the one it was guarding against. 4,096 clears every measured iBay prompt --
-# the largest is 8,569 characters, about 2,380 tokens. Gazette will need more:
-# its worst is 10,404 characters and Thaana tokenizes at closer to 2 characters
-# per token than the 3.6 Latin manages. enrich.client warns when a prompt looks
-# too big rather than letting it be cut silently.
-ENRICH_LOCAL_NUM_CTX = int(os.getenv("ENRICH_LOCAL_NUM_CTX", "4096"))
+# Ollama defaults to 4,096 whatever the model advertises -- qwen2.5:7b loaded at
+# 4,096 against a declared 32,768 -- and truncates a longer prompt silently
+# rather than failing, so the ceiling has to be set here where it is visible.
+#
+# Measured one model at a time with nothing else on the GPU and the weight-load
+# call excluded from the timing:
+#
+#   gemmatranslate:12b   4,096: 6.34s/doc 16/16    8,192: 6.39s/doc 16/16
+#   mistral:latest       4,096: 3.93s/doc 16/16    8,192: 4.01s/doc 16/16
+#
+# So the window costs about 1% of throughput and nothing in reliability, and
+# 8,192 is the right default rather than a luxury: it clears the worst measured
+# gazette prompt (10,404 characters, and Thaana tokenizes at closer to 2
+# characters per token than the 3.6 Latin manages) as well as every iBay one.
+#
+# An earlier version of this comment claimed 8,192 made gemmatranslate four
+# times slower with five failures in sixteen. That measurement was taken with
+# two benchmark processes competing for one GPU and both models resident at
+# once; it measured the contention, not the window. Left recorded here because a
+# plausible wrong number in a config comment outlives the mistake that made it.
+#
+# The profile pass does NOT fit either way: its prompts run about 20,200
+# characters, so see CATALOG_PROFILE_MAX_LISTINGS.
+ENRICH_LOCAL_NUM_CTX = int(os.getenv("ENRICH_LOCAL_NUM_CTX", "8192"))
 # Characters per token used only for that warning. Latin runs about 3.6; this is
 # deliberately pessimistic so mixed Thaana trips the warning rather than sailing
 # past it.

@@ -125,13 +125,11 @@ class EnrichClient:
                 "format": "json",
                 "stream": False,
                 "think": False,
-                # Set explicitly so the ceiling is visible, not because the
-                # default is wrong. Ollama ignores what the model advertises
-                # (qwen2.5:7b loaded at 4,096 against a declared 32,768) and
-                # truncates a longer prompt silently, so the guard is the
-                # warning in _warn_if_prompt_overflows, not a bigger window --
-                # raising this to 8,192 cost 4x throughput and a third of the
-                # responses. See the setting for the measurements.
+                # Ollama ignores what the model advertises (qwen2.5:7b
+                # loaded at 4,096 against a declared 32,768) and truncates a
+                # longer prompt silently, so the ceiling is set explicitly and
+                # _warn_if_prompt_overflows says so when a prompt exceeds it.
+                # See ENRICH_LOCAL_NUM_CTX for the measurements.
                 "options": {"temperature": 0, "top_k": 1, "seed": 42,
                             "num_ctx": settings.ENRICH_LOCAL_NUM_CTX},
             },
