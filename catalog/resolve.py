@@ -9,8 +9,8 @@ from django.db import transaction
 
 from catalog.identity import (brand_vocabulary, clean_title,
                               discriminating_tokens, identity_confidence,
-                              identity_stopwords, match_brand, model_tokens,
-                              product_key, service_key)
+                              identity_stopwords, kind_token, match_brand,
+                              model_tokens, product_key, service_key)
 from catalog.models import Entity, EntityLink
 from search.contacts import primary_phone
 from search.models import SearchDocument
@@ -33,6 +33,26 @@ PRODUCT_ROOTS = {"For Sale"}
 # is a primary listing in its own family. Scope and taxonomy are different
 # questions and conflating them is what produced the defect.
 IN_SCOPE_DOC_TYPES = {"shopping"}
+
+# Leaves where the product's identity is a creative title nothing extracts, so
+# the only token any listing shares is the platform it runs on.
+#
+# 'PS5' was stopworded for exactly this: 291 different games had landed in one
+# entity. Compound designators are exempt from the frequency filter, which is
+# right for 'IPHONE-17-PRO-MAX' and wrong here -- 'PlayStation 5' spells the same
+# platform out longhand and walked straight back in, putting 32 games in one
+# entity and 24 more under PLAYSTATION-4. Frequency cannot separate the two
+# cases: PLAYSTATION-5 appears in 40 documents and IPHONE-17-PRO-MAX in 37.
+#
+# What separates them is interchangeability. Ten cases for one phone are near
+# enough the same product that one spec sheet describes them all; Hogwarts
+# Legacy and Need for Speed share only a disc format. Category is the signal
+# that knows which situation this is, so the miss is deliberate and taken here:
+# 928 listings index and search normally, they just get no entity.
+#
+# `Game Controllers` is deliberately NOT in this set. Its listings are also
+# keyed on the platform, and there a DualSense controller really is one product.
+TITLE_IDENTITY_LEAVES = {"video-computer-gaming-games"}
 
 
 def in_scope(doc: SearchDocument) -> bool:
@@ -66,6 +86,19 @@ def _provider_key(doc: SearchDocument) -> str:
     return f"seller:{seller}" if seller else ""
 
 
+def _unlink(doc: SearchDocument) -> None:
+    """Drop any link this document used to have.
+
+    A miss has to be able to UNDO a hit, or a rule tightened later never takes
+    effect on what the looser rule already linked. Excluding the Games leaf
+    changed nothing on the first run for exactly this reason: 32 games kept the
+    PLAYSTATION-5 link they were given before the exclusion existed, and the
+    pass reported them as missed while the rows sat there.
+    """
+    EntityLink.objects.filter(source=doc.source,
+                              source_key=doc.source_key).delete()
+
+
 def resolve_document(doc: SearchDocument, *, vocabulary=None,
                      stopwords=None) -> Entity | None:
     """The entity this document belongs to, creating it if new.
@@ -73,8 +106,10 @@ def resolve_document(doc: SearchDocument, *, vocabulary=None,
     Returns None when the document is out of scope, or when it carries no usable
     identity. The second is a deliberate miss: an entity built on a guessed
     brand puts wrong specs on a real listing, which is worse than no profile.
+    Either way any earlier link is removed, so a miss is a real miss.
     """
     if not in_scope(doc):
+        _unlink(doc)
         return None
 
     mapped = _mapped_key(doc)
@@ -82,6 +117,7 @@ def resolve_document(doc: SearchDocument, *, vocabulary=None,
     if _is_service(doc):
         provider = _provider_key(doc)
         if not provider and not mapped:
+            _unlink(doc)
             return None
         key = service_key(provider, mapped)
         defaults = {
@@ -91,6 +127,9 @@ def resolve_document(doc: SearchDocument, *, vocabulary=None,
             "identity_confidence": 0.9 if provider.isdigit() else 0.6,
         }
         method = "seller_service"
+    elif mapped in TITLE_IDENTITY_LEAVES:
+        _unlink(doc)
+        return None
     else:
         vocabulary = brand_vocabulary() if vocabulary is None else vocabulary
         brand = match_brand(doc.title_en, vocabulary)
@@ -106,13 +145,16 @@ def resolve_document(doc: SearchDocument, *, vocabulary=None,
         keep = discriminating_tokens(tokens, stopwords if stopwords is not None
                                      else identity_stopwords())
         if not keep:
+            _unlink(doc)
             return None
         tokens = keep
-        key = product_key(brand, tokens, mapped)
+        kind = kind_token(doc.title_en)
+        key = product_key(brand, tokens, mapped, kind)
         defaults = {
             "kind": "product",
             "brand": brand,
             "model_name": " ".join(tokens)[:128],
+            "variant": kind,
             # Graded, not both-or-nothing. This number gates whether inferred
             # specs reach DocumentSpec (spec section 9), so see
             # identity_confidence() in catalog/identity.py for why a model

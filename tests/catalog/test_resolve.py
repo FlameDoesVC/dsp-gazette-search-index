@@ -279,3 +279,96 @@ def test_a_dry_run_prunes_nothing():
 
     assert "pruned" not in counts
     assert Entity.objects.filter(id=abandoned.id).exists()
+
+
+@pytest.mark.django_db
+def test_a_creative_title_leaf_resolves_no_product():
+    """'PS5' was stopworded because 291 games had landed in one entity.
+    Compound designators are exempt from the frequency filter, which is right
+    for IPHONE-17-PRO-MAX and wrong for 'PlayStation 5' -- the same platform
+    spelled longhand walked back in and took 32 games with it. Frequency cannot
+    tell them apart (40 documents against 37), so the category does."""
+    from catalog.resolve import TITLE_IDENTITY_LEAVES, resolve_document
+
+    games = Category.objects.create(key="video-computer-gaming-games",
+                                    label_en="Games", tier="primary")
+    assert games.key in TITLE_IDENTITY_LEAVES
+    SourceCategoryMap.objects.create(
+        source="ibay", path_key=path_key("ibay", ["For Sale", "Games"]),
+        category=games)
+    doc = SearchDocument.objects.create(
+        source="ibay", source_key="g1", doc_type="shopping",
+        url="https://x/g1",
+        title_en="PS5 CD Hogwarts Legacy PlayStation 5 Game | 7776828",
+        attrs={"category_path": ["For Sale", "Games"]})
+
+    assert resolve_document(doc) is None
+
+
+@pytest.mark.django_db
+def test_a_platform_keyed_accessory_still_resolves():
+    """Game Controllers is deliberately not in the set. Its listings are keyed
+    on the platform too, and there a DualSense controller is one product."""
+    from catalog.resolve import resolve_document
+
+    node = Category.objects.create(key="accessories-game-controllers",
+                                   label_en="Game Controllers", tier="accessory")
+    SourceCategoryMap.objects.create(
+        source="ibay", path_key=path_key("ibay", ["For Sale", "Game Controllers"]),
+        category=node)
+    doc = SearchDocument.objects.create(
+        source="ibay", source_key="c1", doc_type="shopping",
+        url="https://x/c1",
+        title_en="PlayStation 5 DualSense Wireless Controller (PS5 Joystick)",
+        attrs={"category_path": ["For Sale", "Game Controllers"]})
+
+    entity = resolve_document(doc)
+    assert entity is not None
+    assert "PLAYSTATION-5" in entity.model_name
+
+
+@pytest.mark.django_db
+def test_a_miss_removes_the_link_a_looser_rule_gave():
+    """A miss must be able to undo a hit, or a rule tightened later never takes
+    effect on what the looser rule already linked. Excluding the Games leaf
+    changed nothing on its first run for exactly this reason: 32 games kept the
+    PLAYSTATION-5 link they were given before the exclusion existed, while the
+    pass cheerfully reported them as missed."""
+    from catalog.models import Entity, EntityLink
+    from catalog.resolve import resolve_document
+
+    games = Category.objects.create(key="video-computer-gaming-games",
+                                    label_en="Games", tier="primary")
+    SourceCategoryMap.objects.create(
+        source="ibay", path_key=path_key("ibay", ["For Sale", "Games"]),
+        category=games)
+    doc = SearchDocument.objects.create(
+        source="ibay", source_key="g9", doc_type="shopping",
+        url="https://x/g9", title_en="PS5 CD Hogwarts Legacy PlayStation 5 Game",
+        attrs={"category_path": ["For Sale", "Games"]})
+    stale = Entity.objects.create(kind="product", key="platform-key",
+                                  model_name="PLAYSTATION-5")
+    EntityLink.objects.create(entity=stale, source="ibay", source_key="g9")
+
+    assert resolve_document(doc) is None
+    assert not EntityLink.objects.filter(source="ibay", source_key="g9").exists()
+
+
+@pytest.mark.django_db
+def test_an_out_of_scope_document_also_loses_its_link(fixtures):
+    """Same rule for the scope gate. 714 property listings once resolved as
+    products off strings like 'FACE2'; adding the gate had to actually detach
+    them, not just stop making new ones."""
+    from catalog.models import Entity, EntityLink
+    from catalog.resolve import resolve_document
+
+    doc = SearchDocument.objects.create(
+        source="ibay", source_key="p9", doc_type="property",
+        url="https://x/p9", title_en="3ROOM APARTMENT @HULHUMALE FACE2 VINARES",
+        attrs={"category_path": ["Property", "Apartments"]})
+    stale = Entity.objects.create(kind="product", key="face2-key",
+                                  model_name="FACE2")
+    EntityLink.objects.create(entity=stale, source="ibay", source_key="p9")
+
+    assert resolve_document(doc) is None
+    assert not EntityLink.objects.filter(source="ibay", source_key="p9").exists()

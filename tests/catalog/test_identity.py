@@ -230,3 +230,49 @@ def test_a_repeated_qualifier_is_emphasis():
 def test_a_plus_that_is_not_bound_to_a_word_is_left_alone(title, expected):
     from catalog.identity import compound_tokens
     assert compound_tokens(title) == expected
+
+
+def test_a_kind_token_separates_a_case_from_a_protector():
+    """Both share brand, designator and the 'Cases, Protection & Skins' leaf, so
+    the key could not tell them apart. Measured: 51 of 1,291 multi-listing
+    product entities mixed kinds this way, 36 in that one leaf, and it caused
+    four of the five precision failures on the golden set."""
+    from catalog.identity import kind_token
+    assert kind_token("Apple iPhone 16 Pro Clear Soft Silicone Case") == "case"
+    assert kind_token("Apple iPhone 16 Pro Privacy Tempered Glass") == "protector"
+
+
+def test_a_bundle_is_its_own_kind():
+    """76 listings read 'Cover Case + Tempered Glass Screen Protector'. That is
+    neither a case nor a protector, so first-match-wins would file it wrongly
+    whichever order the vocabulary happened to be in."""
+    from catalog.identity import kind_token
+    assert kind_token(
+        "Apple iPhone 16 Pro Cover Case + Tempered Glass Screen Protector"
+    ) == "case-protector"
+
+
+@pytest.mark.parametrize("title", [
+    "APPLE IPHONE 17 PRO MAX 256GB (SIM+E-SIM)",
+    "REDMI NOTE 15 PRO 256GB/8GB 5G",
+    "A-VALUE 9.8 INCH DURABLE POCKET SPRING MATTRESS",
+])
+def test_a_title_naming_no_accessory_kind_gets_no_token(title):
+    """The vocabulary is accessory nouns only, and that is what makes it safe to
+    apply everywhere instead of gating on the category. Measured coverage: 89%
+    in 'Cases, Protection & Skins' against 2% in 'Mobile Phones', so the token
+    fires where kinds collide and stays absent where a partial hit would split a
+    good entity."""
+    from catalog.identity import kind_token
+    assert kind_token(title) == ""
+
+
+def test_the_kind_reaches_the_key():
+    from catalog.identity import product_key
+    case = product_key("Apple", ["IPHONE-16-PRO"], "accessories-cases", "case")
+    glass = product_key("Apple", ["IPHONE-16-PRO"], "accessories-cases",
+                        "protector")
+    assert case != glass
+    # And a product with no kind keeps the key it had before the token existed.
+    assert product_key("Apple", ["IPHONE-16-PRO"], "mobile-phones", "") == \
+        product_key("Apple", ["IPHONE-16-PRO"], "mobile-phones")

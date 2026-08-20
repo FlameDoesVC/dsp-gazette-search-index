@@ -100,7 +100,22 @@ class EnrichClient:
         self._record_usage("deepseek", payload)
         return _extract_content("deepseek", payload)
 
+    @staticmethod
+    def _warn_if_prompt_overflows(messages: list[dict], model: str) -> None:
+        """Ollama cuts an oversized prompt without saying so, and a prompt
+        missing its schema or its body still returns confident-looking JSON. A
+        warning is the only thing standing between that and a silently degraded
+        corpus."""
+        chars = sum(len(m.get("content") or "") for m in messages)
+        budget = settings.ENRICH_LOCAL_NUM_CTX * settings.ENRICH_CHARS_PER_TOKEN
+        if chars > budget:
+            logger.warning(
+                "prompt is %d chars, over the ~%d that fit %s's %d-token "
+                "context; ollama will truncate it silently",
+                chars, int(budget), model, settings.ENRICH_LOCAL_NUM_CTX)
+
     async def _call_ollama(self, messages: list[dict], model: str) -> str:
+        self._warn_if_prompt_overflows(messages, model)
         http = await self._client()
         r = await http.post(
             f"{settings.OLLAMA_URL}/api/chat",
@@ -110,7 +125,15 @@ class EnrichClient:
                 "format": "json",
                 "stream": False,
                 "think": False,
-                "options": {"temperature": 0, "top_k": 1, "seed": 42},
+                # Set explicitly so the ceiling is visible, not because the
+                # default is wrong. Ollama ignores what the model advertises
+                # (qwen2.5:7b loaded at 4,096 against a declared 32,768) and
+                # truncates a longer prompt silently, so the guard is the
+                # warning in _warn_if_prompt_overflows, not a bigger window --
+                # raising this to 8,192 cost 4x throughput and a third of the
+                # responses. See the setting for the measurements.
+                "options": {"temperature": 0, "top_k": 1, "seed": 42,
+                            "num_ctx": settings.ENRICH_LOCAL_NUM_CTX},
             },
         )
         r.raise_for_status()

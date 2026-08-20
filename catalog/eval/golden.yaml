@@ -1,17 +1,15 @@
 - source_key: '2534190'
   title: Macbook Air Accessories, MDP to VGA / HDMI and USB 3.0 Gigabit Ethernet Adapter
-  resolved_entity: 3dac4ada88ed2f5e
+  resolved_entity: 93d5acfac04b4b30
   kind: product
   identity: USB-3
   confidence: 0.8
-  listing_count: 7
+  listing_count: 2
   siblings:
-  - USB 3.0 Male to HDMI Female Adapter Converter Cable for Windows Mac HD 1080P RF
-  - HDD Hard Disk Drive Cable USB 3.0 Type A to Micro B Cable USB 3.0 - 0.5m
-  - 30CM USB 3.0 Type A Male to Type A Male  Extension Data Sync Cord Cable Blue
-  correct: false
-  note: '''USB-3'' is a bus standard, not a product line: groups an HDMI adapter,
-    an HDD cable, an extension cable, an ethernet adapter and a capture card'
+  - USB 3.0/2.0 to HDMI Adapter for Windows and Mac 1080P
+  correct: true
+  note: 'kind token fixed this: both remaining listings are USB 3.0 display adapters,
+    where the entity previously held a cable, an extension and a capture card too'
 - source_key: '3293261'
   title: 'Immortals Fenyx Rising - PS5 (Brand New & Sealed PS5 Game) Tel: 7989696'
   resolved_entity: null
@@ -24,7 +22,7 @@
   note: 'correctly unlinked: the game title is the identity and nothing extracts it'
 - source_key: '3333070'
   title: 'JBL Tune 115 BT Wireless Bluetooth Headphone  - Free Delivery : 7989696'
-  resolved_entity: ef100553ffe4f17b
+  resolved_entity: a0c852451886428d
   kind: product
   identity: JBL TUNE-115
   confidence: 0.9
@@ -32,27 +30,33 @@
   siblings: []
   correct: true
 - source_key: '4509177'
-  title: Moving and relocation service
+  title: For all movers services here & House, Apartment, office moving and boats
+    delivery Call. 7833901
   resolved_entity: 29c7b3fdad25c406
   kind: service
   identity: 7833901 / repairs-maintenance-household-work-movers
   confidence: 0.9
   listing_count: 3
   siblings:
-  - Moving and relocation service
-  - Moving and relocation service
+  - 'Apartment relocation / Gei Badhalu koh dhinun: Male - Hulhu7833901male - Villingili
+    7'
+  - HULHUMALE, MALE, VILIMALE FAST AND QUICK MOVING SERVICE.CALL 7833901
   correct: true
 - source_key: '4707826'
-  title: Plumbing and Drain Unblocking Service in Male, Hulhumale and Villimale
+  title: Plumbing Works,7447482. Toilet/ Sink/ Drain/ Flush Tank/ Oiltrap-Junction
+    etc. .Blocked?Leakage?Smelling?
   resolved_entity: 4cdad4b8605c7b2d
   kind: service
   identity: 7447482 / repairs-maintenance-household-work-plumbing
   confidence: 0.9
   listing_count: 25
   siblings:
-  - Plumbing and Drain Unblocking Service in Male, Hulhumale and Villimale
-  - Plumbing and Drain Unblocking Service in Male, Hulhumale and Villimale
-  - Plumbing and Drain Unblocking Service in Male, Hulhumale and Villimale
+  - PLUMBING WORKS | Install & Repair Toilet | Sink or Water,7447482 line For Best
+    price. Contact Professional Plumber
+  - 'Plumber Service: Toilet, Sink, FloorDrain, Tap, FlushTank.Unblocking, Leakage
+    & Smell repair: Male/Hmale:7447482,'
+  - Plumbing Works:/ 7447482. Toilet/ Sink/ Drain/ Flush Tank/ Oiltrap-Junction etc.
+    Blocked?Leakage?Smelling?
   correct: true
 - source_key: '4836018'
   title: Social Media Marketing Packages
@@ -65,30 +69,33 @@
   correct: true
 - source_key: '5170740'
   title: HIKVISION 2MP PoE DOME CCTV Camera 2.8MM / Smart Hybrid Light / 7884445
-  resolved_entity: 71acba70499e2804
+  resolved_entity: 06275ba0b95c37f3
   kind: product
   identity: CAMERA-2
   confidence: 0.8
   listing_count: 1
   siblings: []
   correct: true
-  note: no siblings, but 'CAMERA-2' reads the 2.8mm lens size as a model number and
-    will attract other manufacturers' cameras
+  note: no siblings, but 'CAMERA-2' still reads the 2.8mm lens size as a model number
 - source_key: '5188411'
-  title: Electrical installation and repair services
+  title: Electrical Works.  Building and installing water heaters  Light |  fan |  On
+    the gas stove.  Call 7730068
   resolved_entity: 0a5ca2cf0ad7b8e0
   kind: service
   identity: 7730068 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 8
+  listing_count: 9
   siblings:
-  - Electrical installation and repair services
-  - Electrical installation and repair services
-  - Electrician – Electrical Installation and Repair Services
+  - Electrical Works.  Building and installing water heaters  Light |  fan |  On the
+    gas stove.  Call 7730068
+  - Electrical Works.  Building and installing water heaters  Light |  fan |  On the
+    gas stove.  Call 7730068
+  - Electrical Works.  Building and installing water heaters  Light |  fan |  On the
+    gas stove.  Call Electrician, 7730
   correct: true
 - source_key: '5308944'
   title: SONY WH-1000XM5 NOISE CANCELLING WIRELESS HEADSET, CALL 7781353, 9775757
-  resolved_entity: 4f2d939ac8dc52b9
+  resolved_entity: 567d058bc35ba193
   kind: product
   identity: Sony WH-1000XM5
   confidence: 0.9
@@ -109,102 +116,110 @@
     unit no longer resolves'
 - source_key: '5773954'
   title: Apple iPhone 16 Pro Privacy Tempered Glass Screen Protector - 7774634
-  resolved_entity: 4e9b7384560912f8
+  resolved_entity: bbfe1e8cd36c25f0
   kind: product
   identity: Apple IPHONE-16-PRO
   confidence: 0.9
-  listing_count: 10
+  listing_count: 4
   siblings:
-  - Apple iPhone 16 pro Clear Soft Silicone Plain Camera Protective Case 7774634
-  - Apple iPhone 16 Pro Clear Soft Silicone Plain Camera Protective Cover  7774634
   - Apple iPhone 16 Pro Clear Tempered Glass Screen Protector - 7774634
-  correct: false
-  note: 'mixes kinds: 6 cases and covers with 4 tempered glass protectors, all under
-    one ''Cases, Protection & Skins'' leaf'
+  - iPhone 16 Pro Tempered Glass 7776559 7776002
+  - iPhone 16 Pro Privacy Tempered Glass 7776559 7776002
+  correct: true
+  note: 'kind token fixed this: all four are tempered glass protectors, where the
+    entity previously mixed six cases with four protectors'
 - source_key: '5966028'
   title: Apple IPhone 15 PRO Transparent Clear Soft Silicone Cover - 7774634
-  resolved_entity: 8d90adfeca46de2e
+  resolved_entity: ff27742c6c8dc164
   kind: product
   identity: Apple IPHONE-15-PRO
   confidence: 0.9
-  listing_count: 12
+  listing_count: 6
   siblings:
   - Apple iPhone 15 PRO Black Plain Soft Silicone Cover 7774634
   - Apple iPhone 15 PRO Transparent Clear Soft Silicone Cover 7774634
   - MagSafe Magnetic Clear Case Cover for Apple iPhone 15 Pro FREE DELIVERY 7774634
-  correct: false
-  note: 'mixes kinds: 8 covers, 3 glass protectors and a camera lens protector'
+  correct: true
+  note: 'kind token fixed this: all six are covers and cases'
 - source_key: '6010638'
-  title: Electrical Wiring and Repair Services
+  title: Electrical Fan Switch Board installation Fan Regulator (Wiring, Pannel Boards
+    7328153
   resolved_entity: 132bb8d22dbb8d3b
   kind: service
   identity: 7328153 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 324
+  listing_count: 423
   siblings:
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
+  - Dhoani faharu Adhi launch faharu wire alahai system install koddhinun Call  7328153
+  - Electrical  Fridge Socket Wiring Diagram Refrigerator Water Damage  Call 7328153
+  - Electrical (Wiring, Pannel  Board installation  Switch Socket and Fan Regulator
+    Call 7328153
   correct: true
 - source_key: '6023391'
-  title: Washing Machine Repair and Installation Service
+  title: washing machine Technician vibratingProblem Is Noisy Problem Repair & Services
+    7328153
   resolved_entity: d98af45496d34c0c
   kind: service
   identity: 7328153 / repairs-maintenance-household-work-dhonna-machine-maraamathukuru
   confidence: 0.9
-  listing_count: 205
+  listing_count: 207
   siblings:
-  - Washing Machine Repair and Installation Service
-  - Washing Machine Repair and Installation Service
-  - Washing Machine Repair and Installation Service
+  - washing machine Technician vibratingProblem Is Noisy Problem Repair & Services
+    7328153
+  - washing machine blocked drain hose Water leaking Repair & Services 7328153
+  - washing machine Technician draining not filling with water Repair & Services 7328153
   correct: true
 - source_key: '6025050'
-  title: Fridge Repair & Electrical Services
+  title: FridgeEvaporator Fan Motor not workingBack Panel Very Hot 7328153
   resolved_entity: d16dd5128e5bac78
   kind: service
   identity: 7328153 / services-repairs-maintenance-household-work
   confidence: 0.9
-  listing_count: 325
+  listing_count: 398
   siblings:
-  - Fridge Repair & Electrical Services
-  - Fridge Repair & Electrical Services
-  - Fridge Repair & Electrical Services
+  - FridgeEvaporator Fan Motor not workingBack Panel Very Hot 7328153
+  - Fridge Door Seal ProblemsCompressor noise Door seal problems 7328153
+  - Fridge Compressor noise Door seal problems 7328153
   correct: true
 - source_key: '6041261'
-  title: Washing Machine Repair and Installation Service
+  title: washing machine Technician draining not filling with water Repair & Services
+    7328153
   resolved_entity: d98af45496d34c0c
   kind: service
   identity: 7328153 / repairs-maintenance-household-work-dhonna-machine-maraamathukuru
   confidence: 0.9
-  listing_count: 205
+  listing_count: 207
   siblings:
-  - Washing Machine Repair and Installation Service
-  - Washing Machine Repair and Installation Service
-  - Washing Machine Repair and Installation Service
+  - washing machine Technician vibratingProblem Is Noisy Problem Repair & Services
+    7328153
+  - washing machine blocked drain hose Water leaking Repair & Services 7328153
+  - washing machine Technician draining not filling with water Repair & Services 7328153
   correct: true
 - source_key: '6063714'
-  title: Washing Machine Repair and Installation Service
+  title: Washing Machine Technician Spining Won't Fill with Water Repair & Services
+    7328153
   resolved_entity: d98af45496d34c0c
   kind: service
   identity: 7328153 / repairs-maintenance-household-work-dhonna-machine-maraamathukuru
   confidence: 0.9
-  listing_count: 205
+  listing_count: 207
   siblings:
-  - Washing Machine Repair and Installation Service
-  - Washing Machine Repair and Installation Service
-  - Washing Machine Repair and Installation Service
+  - washing machine Technician vibratingProblem Is Noisy Problem Repair & Services
+    7328153
+  - washing machine blocked drain hose Water leaking Repair & Services 7328153
+  - washing machine Technician draining not filling with water Repair & Services 7328153
   correct: true
 - source_key: '6096112'
-  title: Fridge Repair Technician
+  title: Fridge Technician RepairCall 9770181
   resolved_entity: fb30cdb5d9e94b4c
   kind: service
   identity: 9770181 / services-repairs-maintenance-household-work
   confidence: 0.9
   listing_count: 48
   siblings:
-  - Fridge Repair Technician
-  - Fridge Repair Technician
-  - Fridge Repair Technician
+  - Fridge Technician RepairCall 9770181
+  - Fridge RepairGasLeaking Water LeakingLoud Noises Not Cooling Call 9770181
+  - Fridge Technician Repair & Services Door to Door 9770181
   correct: true
 - source_key: '6116671'
   title: ECO POWER LED SPOTLIGHTS  COB FLOOD LIGHT 400W IP66 | NEW FREE DELIVERY:9445252
@@ -218,68 +233,75 @@
   note: 'missed grouping: row 35 is another ECO POWER floodlight, but ECO POWER is
     not in the brand vocabulary'
 - source_key: '6205152'
-  title: Plumber and Moving Service
+  title: Plumber moving  service 7582050 / 9511072 call me
   resolved_entity: 0486ebb442efdc92
   kind: service
   identity: 7582050 / repairs-maintenance-household-work-plumbing
   confidence: 0.9
   listing_count: 5
   siblings:
-  - Plumber and Moving Service
-  - Plumber and Moving Service
-  - Plumber and Moving Service
+  - Plumber service 7582050/9511072 call me
+  - Plumber service 7582050/9511072 call me
+  - Plumber moving  service 7582050 / 9511072 call me
   correct: true
 - source_key: '6240401'
-  title: Refrigerator, Aircon, Chiller & Freezer Repair Service
+  title: Refrigerator, Aircon, Chillier Freezer Repair & Service Call Home Service.  7438649
   resolved_entity: 0792e10a525853d6
   kind: service
   identity: 7438649 / services-repairs-maintenance-household-work
   confidence: 0.9
-  listing_count: 440
+  listing_count: 529
   siblings:
-  - Refrigerator, Aircon, Chiller & Freezer Repair Service
-  - Refrigerator, Aircon, Chiller & Freezer Repair Service
-  - Refrigerator, Aircon, Chiller & Freezer Repair Service
+  - Refrigerator Icw Maker Fridge Repair & Service Ice make issues Light Not WorkingCall.
+    7438649
+  - Refrigerator, Aircon, Chillier Freezer Repair & Service Call Home Service  7438649
+  - Refrigerator, Aircon, Chillier Freezer Repair & Service Call Home Service  7438649
   correct: true
 - source_key: '6266339'
-  title: Electrical Wiring and Repair Services
+  title: Electrical  Fridge Socket Wiring Diagram Refrigerator Water Damage  Call
+    7328153
   resolved_entity: 132bb8d22dbb8d3b
   kind: service
   identity: 7328153 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 324
+  listing_count: 423
   siblings:
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
+  - Dhoani faharu Adhi launch faharu wire alahai system install koddhinun Call  7328153
+  - Electrical  Fridge Socket Wiring Diagram Refrigerator Water Damage  Call 7328153
+  - Electrical (Wiring, Pannel  Board installation  Switch Socket and Fan Regulator
+    Call 7328153
   correct: true
 - source_key: '6308205'
-  title: AC and Fridge Repair & Servicing
+  title: AC technician fridge technician washing machine technician CALL.  9663178
   resolved_entity: e8072a05966acbb1
   kind: service
   identity: 9663178 / repairs-maintenance-household-work-aircon-servicing-repair
   confidence: 0.9
-  listing_count: 65
+  listing_count: 77
   siblings:
-  - AC and Fridge Repair & Servicing
-  - AC and Fridge Repair & Servicing
-  - AC and Fridge Repair & Servicing
+  - Refrigerator Icw Maker Fridge Repair & Service Ice make issues Light Not WorkingCall.  9663178
+  - Fridge Repair & Service Overheat Water Leak Door Seal Repair Call.... 9663178
+  - Air-condition, Icecube,Refrigerator Repair& Gasfilling Pls Call.  9663178
   correct: true
+  note: one provider's appliance repair, which is what a service entity means
 - source_key: '6311467'
-  title: Electrician – Electrical Wiring and Fault Repair Services
+  title: Electrical Fan Switch Board installation Fan Regulator (Wiring, Pannel Boards...
+    9206620
   resolved_entity: 2dc0fcc96bcd4083
   kind: service
   identity: 9206620 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 253
+  listing_count: 338
   siblings:
-  - Electrician – Electrical Wiring and Fault Repair Services
-  - Electrician – Electrical Wiring and Fault Repair Services
-  - Electrician – Electrical Wiring and Fault Repair Services
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Call. 9206620
+  - Electrical (Wiring, Pannel Board installation Switch Socket and Fan Regulator
+    Call.  9206620
+  - Electrical (Wiring, Pannel Board installation Switch Socket and Fan Regulator
+    Call. 9206620
   correct: true
 - source_key: '6318742'
   title: 'Dahua 4MP Bullet PoE Camera / Model: DH-IPC-HFW1431S1 / 7884445'
-  resolved_entity: ddc610fc4e6800ef
+  resolved_entity: 7f59ca67cb517724
   kind: product
   identity: DH-IPC-HFW1431S1
   confidence: 0.8
@@ -298,33 +320,32 @@
   note: 'missed grouping: other Samsung Type-C earphone listings exist'
 - source_key: '6325305'
   title: iPhone 15 pro max 50w Usb C+C Fast Adepter Free Delivery 9992968
-  resolved_entity: da9cc679d506c4f6
+  resolved_entity: f1abda7fc9e9676c
   kind: product
   identity: Apple IPHONE-15-PRO-MAX
   confidence: 0.9
-  listing_count: 8
+  listing_count: 7
   siblings:
-  - IPHONE 15 PRO MAX 35W USB-C POWER ADAPTER+CABLE 1M | NEW FREE DELIVERY:9445252
   - IPHONE 15 PRO MAX 35W USB-C POWER ADAPTER | FREE DELIVERY:9445252
   - IPHONE 15 PRO MAX 35W USB-C POWER ADAPTER USB-C TO  C  | FREE DELIVERY:9445252
+  - IPHONE 15 PRO MAX 35W USB-C POWER ADAPTER USB-C TO  C CA/Free Delivery :9445252
   correct: true
-  note: 'same kind, differing spec: seven 35W adapters and one 50W adapter for the
-    same phone, in the Charger leaf'
+  note: 'same kind, differing spec: one 50W and six 35W adapters for the same phone'
 - source_key: '6341129'
-  title: Electrical Wiring and Repair Services
+  title: Electrical and wiring works. 7438649
   resolved_entity: 34d149f5ea95817e
   kind: service
   identity: 7438649 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 470
+  listing_count: 565
   siblings:
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Cal. 7438649l
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Cal. 7438649l
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Cal. 7438649l
   correct: true
 - source_key: '6357990'
   title: A-VALUE | 9.8" INCH SINGLE/DOUBLE/QUEEN/KING DURABLE POCKET SPRING MATTRESS
-  resolved_entity: 62dc3f53af644b47
+  resolved_entity: 549d97232182669e
   kind: product
   identity: VALUE-9
   confidence: 0.8
@@ -332,11 +353,11 @@
   siblings:
   - A-VALUE | 9.8" INCH SINGLE/DOUBLE/QUEEN/KING DURABLE GEL MEMORY FOAM MATTRESS
   correct: false
-  note: 'mixes kinds: a pocket spring mattress with a gel memory foam mattress, and
-    ''VALUE-9'' is a brand fragment plus a size'
+  note: 'mixes kinds: a pocket spring mattress with a gel memory foam one. Not fixed
+    by the kind token, whose vocabulary is accessory nouns'
 - source_key: '6370895'
   title: Oneplus N30/10 Pro/ACE 5 Privacy Tempered Glass Free Delivery Call-9992968
-  resolved_entity: ddf55f59b224a3da
+  resolved_entity: 9b4f30dde71b86d0
   kind: product
   identity: OnePlus ACE-5 N30/10
   confidence: 0.9
@@ -344,67 +365,74 @@
   siblings: []
   correct: true
 - source_key: '6377588'
-  title: Door Lock Repair and Smart Lock Installation Service
+  title: Fridge Repair & Service Overheat Water Leak Door Seal Repair Call.  7438649
   resolved_entity: 9f293d6d7317b5cc
   kind: service
   identity: 7438649 / repairs-maintenance-household-work-carpentry
   confidence: 0.9
-  listing_count: 127
+  listing_count: 180
   siblings:
-  - Door Lock Repair and Smart Lock Installation Service
-  - Door Lock Repair and Smart Lock Installation Service
-  - Door Lock Repair and Smart Lock Installation Service
-  correct: true
+  - We fix door locks, smart locks, door, door frame, door closer, fan, heater etc   7438649
+  - We fix door locks, smart locks, door, door frame, door closer, fan, heater etc   7438649
+  - We fix door locks, smart locks, door, door frame, door closer, fan, heater etc   7438649
+  correct: false
+  note: a fridge repair listing grouped with door and lock carpentry. Its category
+    mapped to carpentry, probably off 'Door Seal Repair', and the service key is provider
+    plus mapped category
 - source_key: '6382478'
-  title: Plumbing Services
+  title: Water heater installation and repair. 9206620
   resolved_entity: 058f66980823042b
   kind: service
   identity: 9206620 / repairs-maintenance-household-work-plumbing
   confidence: 0.9
-  listing_count: 68
+  listing_count: 104
   siblings:
-  - Plumbing Services
-  - Plumbing Services
-  - Plumbing Services
+  - Plumbing Works Services CALL 9206620
+  - Plumbing Works Services CALL 9206620
+  - Plumbing Unblock & Repair and Plumbing Solutions Home Service.  9206620
   correct: true
 - source_key: '6385191'
-  title: Electrical Wiring and Repair Services
+  title: Electrical Fridge Socket Wiring Diagram Refrigerator Water Damage Call.  7438649
   resolved_entity: 34d149f5ea95817e
   kind: service
   identity: 7438649 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 470
+  listing_count: 565
   siblings:
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Cal. 7438649l
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Cal. 7438649l
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Cal. 7438649l
   correct: true
 - source_key: '6396744'
-  title: Electrician – Electrical Wiring and Fault Repair Services
+  title: Electrical and wiring works..  9206620
   resolved_entity: 2dc0fcc96bcd4083
   kind: service
   identity: 9206620 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 253
+  listing_count: 338
   siblings:
-  - Electrician – Electrical Wiring and Fault Repair Services
-  - Electrician – Electrical Wiring and Fault Repair Services
-  - Electrician – Electrical Wiring and Fault Repair Services
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Call. 9206620
+  - Electrical (Wiring, Pannel Board installation Switch Socket and Fan Regulator
+    Call.  9206620
+  - Electrical (Wiring, Pannel Board installation Switch Socket and Fan Regulator
+    Call. 9206620
   correct: true
 - source_key: '6399934'
-  title: Refrigerator, Aircon, Chiller & Freezer Repair Service
+  title: Refrigerator, Aircon, Chillier Freezer Repair & Service. Warranty Fridge
+    Home Service Call.. 7438649
   resolved_entity: 0792e10a525853d6
   kind: service
   identity: 7438649 / services-repairs-maintenance-household-work
   confidence: 0.9
-  listing_count: 440
+  listing_count: 529
   siblings:
-  - Refrigerator, Aircon, Chiller & Freezer Repair Service
-  - Refrigerator, Aircon, Chiller & Freezer Repair Service
-  - Refrigerator, Aircon, Chiller & Freezer Repair Service
+  - Refrigerator Icw Maker Fridge Repair & Service Ice make issues Light Not WorkingCall.
+    7438649
+  - Refrigerator, Aircon, Chillier Freezer Repair & Service Call Home Service  7438649
+  - Refrigerator, Aircon, Chillier Freezer Repair & Service Call Home Service  7438649
   correct: true
 - source_key: '6410182'
-  title: ECO POWER IP6 COB LED Flood Light
+  title: ECO POWER LED SPOTLIGHTS  COB FLOOD LIGHT 200W IP6 6/NeW Free Delivery :9445252
   resolved_entity: null
   kind: null
   identity: null
@@ -412,11 +440,12 @@
   listing_count: null
   siblings: []
   correct: false
-  note: 'missed grouping: row 18 is another ECO POWER floodlight'
+  note: 'missed grouping: row 18 is another ECO POWER floodlight and ECO POWER is
+    not in the brand vocabulary'
 - source_key: '6431663'
   title: MOTOROLA MOTO G06 POWER 256GB/4GB AVAILABLE CALL 94242428/7939293 /VISIT
     SHOP
-  resolved_entity: d986e78738256b07
+  resolved_entity: 7255b94ce578e673
   kind: product
   identity: 256GB/4GB G06
   confidence: 0.8
@@ -426,7 +455,7 @@
 - source_key: '6463559'
   title: 15 feet LED Light Strip Set 5050RGB Seven-color 24-key IR BT Controller TV
     Backg
-  resolved_entity: a4543fda9f63a7e5
+  resolved_entity: 626cfc0eed022f93
   kind: product
   identity: 24-KEY 5050RGB
   confidence: 0.8
@@ -435,7 +464,7 @@
   correct: true
 - source_key: '6467998'
   title: SIGMA CONTEMPORARY LENSE 20-200MM F3.5-6.3 DG SONY E MOUNT 9424242/7939293
-  resolved_entity: 559cb2700e2f5e45
+  resolved_entity: 581b907d099f88bc
   kind: product
   identity: Sony 20-200MM F3
   confidence: 0.9
@@ -475,44 +504,47 @@
   correct: false
   note: 'missed grouping: other LG 9KG washers exist'
 - source_key: '6495108'
-  title: Academic Assignment Help and Turnitin Report Services
+  title: Professional Assignment Help & Data Analysis 100% Plagiarism-Free
   resolved_entity: 063840d791ee3973
   kind: service
   identity: seller:ucd2015 / other-services-other-services
   confidence: 0.6
   listing_count: 15
   siblings:
-  - Academic Assignment Help and Turnitin Report Services
-  - Academic Assignment Help and Turnitin Report Services
-  - Academic Assignment Help and Turnitin Report Services
+  - 10% Discount from all the assignments - Special Offer
+  - Worry about your assignments high AI or similarity rate?
+  - Turnitin - Similarity & AI Reports
   correct: true
 - source_key: '6506860'
-  title: Electrical Wiring and Repair Services
+  title: Electrical and wiring works... 7328153
   resolved_entity: 132bb8d22dbb8d3b
   kind: service
   identity: 7328153 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 324
+  listing_count: 423
   siblings:
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
-  - Electrical Wiring and Repair Services
+  - Dhoani faharu Adhi launch faharu wire alahai system install koddhinun Call  7328153
+  - Electrical  Fridge Socket Wiring Diagram Refrigerator Water Damage  Call 7328153
+  - Electrical (Wiring, Pannel  Board installation  Switch Socket and Fan Regulator
+    Call 7328153
   correct: true
 - source_key: '6513974'
-  title: Electrician – Electrical Wiring and Fault Repair Services
+  title: Electrical and wiring works 9206620
   resolved_entity: 2dc0fcc96bcd4083
   kind: service
   identity: 9206620 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
-  listing_count: 253
+  listing_count: 338
   siblings:
-  - Electrician – Electrical Wiring and Fault Repair Services
-  - Electrician – Electrical Wiring and Fault Repair Services
-  - Electrician – Electrical Wiring and Fault Repair Services
+  - Electrical Wiring Fault Diagnoses and Troubleshooting.Call. 9206620
+  - Electrical (Wiring, Pannel Board installation Switch Socket and Fan Regulator
+    Call.  9206620
+  - Electrical (Wiring, Pannel Board installation Switch Socket and Fan Regulator
+    Call. 9206620
   correct: true
 - source_key: '6520930'
   title: F gold 001 7 wooden coffee table white brown 587 53885 sku | 7838533
-  resolved_entity: 5dd9e3aef47783a3
+  resolved_entity: b8a555c6bc3392b7
   kind: product
   identity: BROWN-587 GOLD-001
   confidence: 0.8
@@ -520,8 +552,7 @@
   siblings:
   - F gold 001 160 wooden coffee table white brown 587 53882 sku | 7838533
   correct: true
-  note: 'same kind, differing spec: two sizes of one seller''s wooden coffee table,
-    keyed off their own sku scheme'
+  note: 'same kind, differing spec: two sizes of one seller''s wooden coffee table'
 - source_key: '6548058'
   title: Brewine Electric Coconut Scraper 2in1 Brand New Free Delivery 7962333
   resolved_entity: null
@@ -533,33 +564,34 @@
   correct: true
   note: 'correctly unlinked: no other Brewine coconut scraper to group with'
 - source_key: '6552501'
-  title: Electrician in Male and Hulhumale
+  title: any type of electric works male/hulhumale-7440414
   resolved_entity: e0cff58459a5f8f8
   kind: service
   identity: 7440414 / repairs-maintenance-household-work-electrical-wiring
   confidence: 0.9
   listing_count: 2
   siblings:
-  - Electrician in Male and Hulhumale
+  - any type of electric works male/hulhumale-7440414
   correct: true
 - source_key: '6558742'
-  title: Apartment Moving Service
+  title: Apartment moving  service 7582050 /9511072
   resolved_entity: 4e3978bc38c3c570
   kind: service
   identity: 7582050 / repairs-maintenance-household-work-movers
   confidence: 0.9
-  listing_count: 125
+  listing_count: 150
   siblings:
-  - Apartment Moving Service
-  - Apartment Moving Service
-  - Apartment Moving Service
+  - Apartment moving  service 7582050
+  - Apartment moving  service 7582050/9511072 call me
+  - Apartment moving  service 7582050/9511072 call me
   correct: true
 - source_key: '6563381'
   title: Sonifer 10in1 Multi Functional Food Processor Blender New Free Delivery 7962333
-  resolved_entity: 77a812dd93678ea6
+  resolved_entity: c6a6019b2acc1500
   kind: product
   identity: 10IN1
   confidence: 0.8
   listing_count: 1
   siblings: []
   correct: true
+  note: was the 2IN1 entity that grouped a coconut scraper with blenders; now a singleton

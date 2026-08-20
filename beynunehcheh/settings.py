@@ -249,6 +249,21 @@ ENRICH_PROVIDER = os.getenv("ENRICH_PROVIDER", "deepseek")
 ENRICH_MODEL = os.getenv("ENRICH_MODEL", "deepseek-v4-flash")
 ENRICH_MODEL_ESCALATION = os.getenv("ENRICH_MODEL_ESCALATION", "deepseek-v4-pro")
 ENRICH_MODEL_LOCAL = os.getenv("ENRICH_MODEL_LOCAL", "qwen3.5:4b")
+# Ollama defaults to 4,096 whatever the model advertises, and truncates a longer
+# prompt silently rather than failing. Set explicitly so the ceiling is visible
+# and tunable, but left AT the default: raising it to 8,192 on the current GPU
+# made gemmatranslate:12b four times slower (26.8s vs 6.5s per document) and
+# returned five empty responses out of sixteen, which is a worse failure than
+# the one it was guarding against. 4,096 clears every measured iBay prompt --
+# the largest is 8,569 characters, about 2,380 tokens. Gazette will need more:
+# its worst is 10,404 characters and Thaana tokenizes at closer to 2 characters
+# per token than the 3.6 Latin manages. enrich.client warns when a prompt looks
+# too big rather than letting it be cut silently.
+ENRICH_LOCAL_NUM_CTX = int(os.getenv("ENRICH_LOCAL_NUM_CTX", "4096"))
+# Characters per token used only for that warning. Latin runs about 3.6; this is
+# deliberately pessimistic so mixed Thaana trips the warning rather than sailing
+# past it.
+ENRICH_CHARS_PER_TOKEN = float(os.getenv("ENRICH_CHARS_PER_TOKEN", "2.2"))
 ENRICH_CONCURRENCY = int(os.getenv("ENRICH_CONCURRENCY", "8"))
 ENRICH_TIMEOUT = float(os.getenv("ENRICH_TIMEOUT", "120"))
 # translate.py already caps gazette bodies at 3,500 chars; match it.

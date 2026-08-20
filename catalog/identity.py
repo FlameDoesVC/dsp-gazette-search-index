@@ -85,6 +85,49 @@ def compound_tokens(text: str) -> list[str]:
     return out
 
 
+# What KIND of thing the listing is, when the title names it.
+#
+# The entity key is brand plus designator plus mapped category, and inside a
+# coarse accessory leaf that is not enough: a silicone case and a tempered glass
+# protector for the same phone share all three. Measured over the 13,356 For
+# Sale listings, 51 of 1,291 multi-listing product entities (4.0%) mixed kinds
+# this way, 36 of them in 'Cases, Protection & Skins' alone, and it was four of
+# the five precision failures on the golden set.
+#
+# The vocabulary is accessory nouns only, and that is what makes it safe to
+# apply everywhere rather than gating it on the category. Measured coverage per
+# leaf: 'Cases, Protection & Skins' 89%, 'Charger' 92%, 'Battery' 99%, 'Screen
+# Protection' 82% -- and 'Mobile Phones' 2%, 'Games' 1%, 'Tablets' 3%. So the
+# token fires almost always where kinds actually collide, and almost never where
+# a partial hit would split a good entity. A phone listing that does say
+# 'battery' or 'case' is an accessory listing filed under phones.
+_KINDS = {
+    "case": r"\b(case|cases|cover|covers|casing|pouch|sleeve)\b",
+    "protector": r"\b(tempered\s+glass|screen\s+protector|protector|protection)\b",
+    "charger": r"\b(charger|chargers|adapter|adaptor|adepter|dock)\b",
+    "cable": r"\b(cable|cables|cord|wire)\b",
+    "audio": r"\b(earphone|earphones|earbud|earbuds|headphone|headphones|"
+             r"headset|airpod|airpods|speaker|speakers)\b",
+    "battery": r"\b(battery|batteries|powerbank|power\s+bank)\b",
+    "holder": r"\b(holder|stand|mount|grip)\b",
+    "memory": r"\b(memory\s+card|sd\s+card|flash\s+drive|pendrive|"
+              r"pen\s+drive|ssd|hdd)\b",
+    "hub": r"\b(hub|splitter|converter|extension)\b",
+}
+_KINDS = {name: re.compile(pattern, re.I) for name, pattern in _KINDS.items()}
+
+
+def kind_token(text: str) -> str:
+    """The accessory kinds the title names, sorted, or "" when it names none.
+
+    Sorted and joined rather than first-match-wins, because a bundle really is
+    a third thing: 76 listings read 'Cover Case + Tempered Glass Screen
+    Protector', and that is neither a case nor a protector.
+    """
+    found = sorted(name for name, rx in _KINDS.items() if rx.search(text or ""))
+    return "-".join(found)
+
+
 def clean_title(text: str) -> str:
     out = strip_phones(text or "")
     out = _PLUS_SUFFIX.sub(" PLUS", out)
@@ -135,13 +178,20 @@ def _key(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
-def product_key(brand: str, tokens: list[str], category_key: str) -> str:
+def product_key(brand: str, tokens: list[str], category_key: str,
+                kind: str = "") -> str:
     """category_key is the MAPPED canonical key only, empty when unmapped.
     Never the classified one -- that arrives from a model call, and a key that
-    depends on a model call is not reproducible (spec section 7.1)."""
+    depends on a model call is not reproducible (spec section 7.1).
+
+    `kind` is kind_token()'s output and separates a case from a protector inside
+    one coarse accessory leaf. Empty for anything whose title names no accessory
+    kind, which is most non-accessories, so those keys are unchanged.
+    """
     return _key("product", (brand or "").strip().lower(),
                 "|".join(sorted(t.upper() for t in tokens)),
-                (category_key or "").strip().lower())
+                (category_key or "").strip().lower(),
+                (kind or "").strip().lower())
 
 
 def service_key(provider_key: str, service_type: str) -> str:
