@@ -2,10 +2,15 @@
 
 Two rules govern everything here:
 
-1. The system prompt is byte-identical on every call. It is ~800 tokens of
-   instructions plus schema, and DeepSeek's context cache makes it cost
-   $0.007/M instead of $0.22/M -- but only if the prefix never varies. Nothing
-   per-document may leak into it.
+1. The system prompt is byte-identical on every call, and DeepSeek's context
+   cache makes it cost $0.007/M instead of $0.22/M -- but only if the prefix
+   never varies. Nothing per-document may leak into it.
+
+   Measured 2026-08-20: 11,163 characters, about 3,100 tokens. It was ~800 when
+   this was written and the schema block has grown since. It is worth knowing
+   how lopsided that makes a call: the median iBay shopping user message is 574
+   characters, so roughly 93% of the input tokens are the cached prefix and the
+   cache is doing nearly all the work of keeping this affordable.
 2. The instructions repeat, in the imperative, the two rules the grounding
    validator enforces anyway: select numbers from the candidate list, and do
    no arithmetic. Telling the model reduces the number of records that have to

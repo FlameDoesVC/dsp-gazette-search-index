@@ -133,7 +133,19 @@ that changes entity keys. Both mean paying again.
     venv/bin/python manage.py reindex
 
 This is the step that makes entity profiles visible to search and to the
-frontend. Skipping it is why resolved links can exceed indexed `attrs.entity_id`.
+frontend.
+
+It publishes nothing for an unprofiled entity, and that is deliberate rather
+than a bug: `catalog/overlay.py::apply_entity` returns the draft untouched
+unless `profile_status` is `ok` or `needs_review`. So resolving 18,424 links and
+then reindexing wrote `attrs.entity_id` on zero documents, because every entity
+was still `pending`. Reindexing to close a gap between resolved links and
+indexed entity ids does not work; step 8 is what closes it.
+
+Worth deciding rather than assuming: a link with no profile still knows that 34
+other listings are the same product, and `listing_count` needs no model call. If
+the frontend should show groupings before any profiling spend, the overlay has
+to publish the link-derived fields separately from the profile-derived ones.
 
 ### 10-12. Search surface
 
