@@ -203,8 +203,12 @@ def test_a_brand_with_no_model_designator_forms_no_entity(fixtures):
 def test_a_platform_token_forms_no_entity(fixtures):
     """PS5 appears in 426 For Sale listings; it names a console, not a game."""
     path = ["For Sale", "Video & Computer Gaming", "Games"]
+    # Both titles must carry NO designator other than the platform token.
+    # 'Alan Wake 2' used to sit here and now correctly yields WAKE-2: a numbered
+    # game title is a real product identity, so it was the fixture that was
+    # wrong, not the rule. Both of these are real corpus titles.
     a = make_doc("d2", "Immortals Fenyx Rising - PS5 Brand New Sealed", path)
-    b = make_doc("d3", "Alan Wake 2 Deluxe Edition PS5 Game Sealed", path)
+    b = make_doc("d3", "Silent Hill f - PS5 Brand New Sealed PS5 Game", path)
     assert resolve_document(a, stopwords={"PS5"}) is None
     assert resolve_document(b, stopwords={"PS5"}) is None
     assert Entity.objects.count() == 0

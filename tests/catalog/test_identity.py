@@ -148,3 +148,57 @@ def test_strong_tokens_rejects_bare_units():
     from catalog.identity import strong_tokens
     assert strong_tokens(["256GB", "2A", "200CM"]) == []
     assert strong_tokens(["QUEST-2", "256GB"]) == ["QUEST-2"]
+
+
+# --------------------------------------------------------------------------
+# Compound designators. Measured: 8,939 of 13,356 detail-scraped For Sale
+# listings had no discriminating identity, and 2,588 of those were this case --
+# a product line followed by its number, which model_tokens discarded because a
+# bare number is usually a quantity.
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("title,expected", [
+    ("Apple iPhone 11 Cover Case + Tempered Glass", ["IPHONE-11"]),
+    ("Realme Buds T200 Lite Headphones", ["T200"]),
+    ("Xiaomi POCO C71 free delivery", ["C71"]),
+])
+def test_a_product_line_and_its_number_is_a_designator(title, expected):
+    from catalog.identity import discriminating_tokens, model_tokens
+    assert discriminating_tokens(model_tokens(title), set()) == expected
+
+
+def test_a_trailing_qualifier_keeps_variants_apart():
+    """Without the qualifier, 'iPhone 11 Pro Max' and 'iPhone 11' collapse into
+    one entity, which is the merge the discriminating rule exists to prevent."""
+    from catalog.identity import compound_tokens
+    assert compound_tokens("Apple iPhone 11 Cover") == ["IPHONE-11"]
+    assert compound_tokens("Apple iPhone 11 Pro Max Cover") == ["IPHONE-11-PRO-MAX"]
+    assert compound_tokens("Apple iPhone 11 Pro Cover") == ["IPHONE-11-PRO"]
+
+
+@pytest.mark.parametrize("title", [
+    "3 IN 1 BOSS INVERTER WELDING MACHINE",
+    "SET 2 pcs kitchen knife",
+    "Pack 4 assorted covers",
+])
+def test_a_quantity_is_not_a_designator(title):
+    from catalog.identity import compound_tokens
+    assert compound_tokens(title) == []
+
+
+def test_a_number_belonging_to_the_next_word_is_not_a_designator():
+    """'Hisun 2-Burner Gas Stove' produced HISUN-2 before the lookahead existed,
+    treating a burner count as a model number."""
+    from catalog.identity import compound_tokens, discriminating_tokens, model_tokens
+    assert compound_tokens("Hisun 2-Burner Gas Stove") == []
+    assert discriminating_tokens(
+        model_tokens("Hisun 2-Burner Gas Stove"), set()) == ["2-BURNER"]
+
+
+def test_a_compound_is_exempt_from_the_frequency_filter():
+    """A compound is specific by construction, so frequency says nothing useful
+    about it. 'IPHONE-11' shared by 200 case listings is a product family, and
+    the mapped category in the entity key separates a case from a phone."""
+    from catalog.identity import discriminating_tokens
+    assert discriminating_tokens(["IPHONE-11"], {"IPHONE-11"}) == ["IPHONE-11"]
+    assert discriminating_tokens(["PS5"], {"PS5"}) == []

@@ -26,6 +26,53 @@ _WS = re.compile(r"\s+")
 _MODEL_TOKEN = re.compile(r"^(?=.*\d)[A-Za-z0-9][A-Za-z0-9\-/\.]{1,23}$")
 _BARE_YEAR = re.compile(r"^20\d{2}$")
 
+# A product line followed by its number: 'iPhone 11', 'JBL 470', 'Galaxy A15'.
+#
+# model_tokens drops digit-only tokens because a bare number is usually a
+# quantity, and that was right for '3 IN 1' and wrong for 'iPhone 11'. Measured
+# on 13,356 detail-scraped For Sale listings: 8,939 (66.9%) had no discriminating
+# identity, and 2,588 of those were this case alone -- 'Apple iPhone 11 Cover
+# Case' has obvious identity and the rule threw it away.
+#
+# The trailing qualifiers are not optional. Without them 'iPhone 11 Pro Max' and
+# 'iPhone 11' collapse into one entity, which is the merge the discriminating
+# rule exists to prevent.
+_QUALIFIER = r"(?:pro|max|plus|ultra|mini|lite|air|se)"
+# The trailing lookahead rejects a number that belongs to the word AFTER it:
+# 'Hisun 2-Burner Gas Stove' produced HISUN-2 without it, treating a burner count
+# as a model number. A real designator is followed by a space or the end of the
+# title, never by a hyphenated noun.
+_LINE_NUMBER = re.compile(
+    rf"\b([A-Za-z]{{3,}})\s+(\d{{1,4}})((?:\s+{_QUALIFIER})*)(?![-\w])", re.I)
+# Words that take a number without naming a product: 'SET 2', 'PACK 4'.
+_NOT_A_LINE = {"set", "pack", "pcs", "piece", "pieces", "box", "lot", "size",
+               "qty", "unit", "units", "watt", "volt", "amp", "inch", "gen",
+               "ply", "pair", "pairs", "row", "rows", "seater", "burner",
+               "door", "ton", "kilo", "litre", "liter"}
+
+
+def compound_tokens(text: str) -> list[str]:
+    """Product-line designators of the form WORD-NUMBER[-QUALIFIER].
+
+    Returned uppercased and hyphen-joined so they are one token to the key, and
+    exempt from the document-frequency stopword filter (see
+    discriminating_tokens): a compound is specific by construction, where a bare
+    'PS5' is not. 'iPhone 11' shared by 200 case listings is a product family,
+    and the mapped category in the entity key is what separates a case from a
+    phone.
+    """
+    out: list[str] = []
+    for match in _LINE_NUMBER.finditer(clean_title(text)):
+        word, number, qualifiers = match.groups()
+        if word.lower() in _NOT_A_LINE or _BARE_YEAR.match(number):
+            continue
+        parts = [word.upper(), number]
+        parts += [q.upper() for q in qualifiers.split()]
+        token = "-".join(parts)
+        if token not in out:
+            out.append(token)
+    return out
+
 
 def clean_title(text: str) -> str:
     out = strip_phones(text or "")
@@ -45,6 +92,7 @@ def model_tokens(text: str, limit: int = 4) -> list[str]:
         if token.isdigit():          # a bare quantity is not a model
             continue
         seen.add(token)
+    seen.update(compound_tokens(text))
     return sorted(seen)[:limit]
 
 
@@ -180,6 +228,16 @@ def clear_stopword_cache() -> None:
     _STOPWORD_CACHE = None
 
 
+_COMPOUND = re.compile(r"^[A-Z]{3,}-\d{1,4}(?:-[A-Z]+)*$")
+
+
 def discriminating_tokens(tokens: list[str], stopwords: set[str]) -> list[str]:
-    """Strong tokens that are also rare enough to mean something."""
-    return [t for t in strong_tokens(tokens) if t.upper() not in stopwords]
+    """Strong tokens that are also rare enough to mean something.
+
+    A compound designator is exempt from the frequency filter. It is specific by
+    construction -- 'IPHONE-11-PRO' names one product line where a bare 'PS5'
+    names a platform -- so frequency says nothing useful about it, and applying
+    the filter would discard the 2,588 listings this rule exists to recover.
+    """
+    return [t for t in strong_tokens(tokens)
+            if _COMPOUND.match(t) or t.upper() not in stopwords]
