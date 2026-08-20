@@ -30,7 +30,7 @@ export function Gallery({ images }: { images: string[] }) {
               aria-label={`Photo ${i + 1} of ${images.length}`}
               className={
                 "shrink-0 overflow-hidden rounded-md border-2 " +
-                (i === selected ? "border-accent" : "border-transparent")
+                (i === selected ? "border-primary" : "border-transparent")
               }
             >
               <img src={src} alt="" loading="lazy" className="h-16 w-16 object-cover" />

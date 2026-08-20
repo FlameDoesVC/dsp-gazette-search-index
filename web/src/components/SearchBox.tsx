@@ -57,19 +57,18 @@ export function SearchBox({
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         placeholder="Search"
-        className="w-full rounded-full border border-line px-4 py-2.5 text-base
-                   outline-none focus:border-accent"
+        className="input w-full"
       />
       {open && suggestions.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg
-                       border border-line bg-bg shadow-lg">
+                       border border-base-300 bg-base-100 shadow-lg">
           {suggestions.map((s) => (
             <li key={s.term}>
               <button
                 type="button"
                 dir={dirFor(s.term)}
                 lang={langFor(s.term)}
-                className="block w-full px-4 py-2 text-start text-sm hover:bg-chip"
+                className="block w-full px-4 py-2 text-start text-sm hover:bg-base-200"
                 onMouseDown={() => {
                   setValue(s.term);
                   setOpen(false);

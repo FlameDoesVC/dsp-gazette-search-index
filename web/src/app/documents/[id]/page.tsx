@@ -36,13 +36,13 @@ export default async function DocumentPage({
       <div className="flex items-center justify-between gap-2">
         <SourceBadge sourceKey={String(doc.source ?? "")} />
         <a href={String(doc.url ?? "#")} target="_blank" rel="noopener noreferrer"
-           className="text-xs text-accent underline">
+           className="text-xs text-primary underline">
           View original listing
         </a>
       </div>
 
       <Bidi as="h1" text={title} className="mt-2 text-2xl font-semibold" />
-      <Bidi as="p" text={summary} className="mt-1 text-sm text-muted" />
+      <Bidi as="p" text={summary} className="mt-1 text-sm text-base-content/60" />
 
       {docType === "shopping" && thumbnails.length > 0 && (
         <div className="mt-4">

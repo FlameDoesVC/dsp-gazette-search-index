@@ -17,8 +17,7 @@ export default function Home() {
             type="search"
             name="q"
             placeholder="Search"
-            className="w-full rounded-full border border-line px-4 py-3 text-base
-                       outline-none focus:border-accent"
+            className="input w-full"
           />
         </form>
       </div>

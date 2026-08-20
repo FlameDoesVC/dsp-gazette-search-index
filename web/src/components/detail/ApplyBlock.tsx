@@ -36,8 +36,7 @@ export function ApplyBlock({ methods }: { methods: Method[] }) {
             href={hrefFor(m)}
             target={m.kind === "form" || m.kind === "portal" ? "_blank" : undefined}
             rel="noopener noreferrer"
-            className="rounded-full border border-line px-3 py-1.5 text-sm
-                       hover:border-accent"
+            className={`btn btn-sm ${i === 0 ? "btn-primary" : ""}`}
           >
             {LABEL[m.kind] ?? m.value}
           </a>

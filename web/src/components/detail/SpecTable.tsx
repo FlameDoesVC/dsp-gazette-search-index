@@ -19,13 +19,13 @@ export function SpecTable({ specs }: { specs: SpecRow[] }) {
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold">Specifications</h2>
-      <dl className="divide-y divide-line text-sm">
+      <dl className="divide-y divide-base-300 text-sm">
         {specs.map((s, i) => (
           <div key={i} className="flex justify-between gap-4 py-1.5">
-            <dt className="text-muted">{s.key_raw}</dt>
+            <dt className="text-base-content/60">{s.key_raw}</dt>
             <dd className="text-end">
               <Bidi as="span" text={s.value_text ?? String(s.value_num ?? "")} />
-              {s.unit ? <span className="ms-0.5 text-xs text-muted">{s.unit}</span> : null}
+              {s.unit ? <span className="ms-0.5 text-xs text-base-content/60">{s.unit}</span> : null}
             </dd>
           </div>
         ))}

@@ -12,7 +12,7 @@ export function ResultList({
 }) {
   if (!results.length) {
     return (
-      <p className="py-12 text-center text-sm text-muted">
+      <p className="py-12 text-center text-sm text-base-content/60">
         No results. Try fewer words, or check the spelling.
       </p>
     );

@@ -27,7 +27,7 @@ export function RangeFacet({
             <span
               key={i}
               data-testid="hist-bar"
-              className="flex-1 rounded-t-[2px] bg-chip"
+              className="flex-1 rounded-t-[2px] bg-base-200"
               style={{ height: `${Math.max(4, (bucket.count / peak) * 100)}%` }}
             />
           );
@@ -41,9 +41,9 @@ export function RangeFacet({
           placeholder={facet.min != null ? String(Math.floor(facet.min)) : "min"}
           onChange={(e) => setLo(e.target.value)}
           aria-label={`${facet.label} minimum`}
-          className="w-20 rounded border border-line px-1.5 py-1"
+          className="input input-sm w-20"
         />
-        <span className="text-muted">-</span>
+        <span className="text-base-content/60">-</span>
         <input
           type="number"
           inputMode="numeric"
@@ -51,12 +51,12 @@ export function RangeFacet({
           placeholder={facet.max != null ? String(Math.ceil(facet.max)) : "max"}
           onChange={(e) => setHi(e.target.value)}
           aria-label={`${facet.label} maximum`}
-          className="w-20 rounded border border-line px-1.5 py-1"
+          className="input input-sm w-20"
         />
-        {facet.unit ? <span className="text-xs text-muted">{facet.unit}</span> : null}
+        {facet.unit ? <span className="text-xs text-base-content/60">{facet.unit}</span> : null}
         <button
           type="button"
-          className="rounded bg-chip px-2 py-1 text-xs"
+          className="btn btn-sm"
           onClick={() =>
             onApply(loV === "" ? null : Number(loV), hiV === "" ? null : Number(hiV))
           }

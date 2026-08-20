@@ -13,7 +13,7 @@ export function Tabs({
   if (!meta) return null;
 
   return (
-    <nav className="flex gap-1 border-b border-line" role="tablist">
+    <nav className="tabs tabs-box" role="tablist">
       {meta.tabs.map((t) => {
         const selected = state.type === t.key;
         return (
@@ -26,12 +26,7 @@ export function Tabs({
               e.preventDefault();
               onChange(changeTab(state, t.key));
             }}
-            className={
-              "px-3 py-2 text-sm " +
-              (selected
-                ? "border-b-2 border-accent font-semibold"
-                : "text-muted hover:text-fg")
-            }
+            className={selected ? "tab tab-active" : "tab"}
           >
             {t.label_en}
           </a>

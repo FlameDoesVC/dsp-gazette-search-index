@@ -35,7 +35,7 @@ export function ReportForm({ documentId }: { documentId: number }) {
   return (
     <Disclosure label="Report a problem">
       {done ? (
-        <p className="text-sm text-muted">
+        <p className="text-sm text-base-content/60">
           Thanks for letting us know. The report has been recorded.
         </p>
       ) : (
@@ -59,13 +59,13 @@ export function ReportForm({ documentId }: { documentId: number }) {
             onChange={(e) => setNote(e.target.value)}
             placeholder="Anything else we should know? (optional)"
             rows={3}
-            className="mt-3 w-full rounded border border-line px-2 py-1.5 text-sm"
+            className="textarea textarea-sm mt-3 w-full"
           />
           <div className="mt-3 flex justify-end">
             <button
               type="button"
               onClick={submit}
-              className="rounded bg-accent px-3 py-1.5 text-sm text-white"
+              className="btn btn-sm btn-primary"
             >
               Submit report
             </button>

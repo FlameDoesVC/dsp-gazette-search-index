@@ -27,13 +27,13 @@ export function FacetPanel({
       {facets.map((facet) => {
         const isActive = activeValues(state, facet.key).length > 0;
         return (
-          <section key={facet.key} className="border-b border-line pb-3 last:border-0">
+          <section key={facet.key} className="border-b border-base-300 pb-3 last:border-0">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">{facet.label}</h3>
               {isActive && (
                 <button
                   type="button"
-                  className="text-xs text-accent underline"
+                  className="text-xs text-primary underline"
                   onClick={() => onChange(clearFacet(state, facet.key))}
                 >
                   Clear {facet.label}

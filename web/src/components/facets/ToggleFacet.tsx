@@ -14,10 +14,10 @@ export function ToggleFacet({
   return (
     <label className="flex items-center justify-between gap-2 text-sm">
       <span className="flex items-center gap-2">
-        <input type="checkbox" checked={on} onChange={onToggle} />
+        <input type="checkbox" checked={on} onChange={onToggle} className="toggle toggle-sm" />
         {facet.label}
       </span>
-      <span className="text-xs text-muted">{facet.count_true}</span>
+      <span className="text-xs text-base-content/60">{facet.count_true}</span>
     </label>
   );
 }

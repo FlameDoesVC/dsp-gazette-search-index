@@ -29,7 +29,7 @@ export function SourceBadge({
   const label = lang === "dv" && source.label_dv ? source.label_dv : source.label_en;
 
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-muted ms-0">
+    <span className="badge badge-sm gap-1.5">
       {source.icon ? (
         <img
           src={source.icon}
@@ -43,7 +43,7 @@ export function SourceBadge({
         <span
           aria-hidden="true"
           style={{ width: px, height: px }}
-          className="grid shrink-0 place-items-center rounded-[3px] bg-chip
+          className="grid shrink-0 place-items-center rounded-[3px] bg-base-200
                      text-[9px] font-semibold"
         >
           {source.icon_fallback_text || source.label_en.slice(0, 2)}

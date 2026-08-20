@@ -21,9 +21,9 @@ export function CompensationTable({ comp }: { comp: Compensation }) {
     <section className="space-y-3">
       <h2 className="text-sm font-semibold">Pay breakdown</h2>
 
-      <table className="w-full text-sm">
+      <table className="table table-sm w-full">
         <tbody>
-          <tr className="border-b border-line">
+          <tr className="border-b border-base-300">
             <td className="py-1.5">Basic salary</td>
             <td className="py-1.5 text-end">
               {comp.basic_salary != null
@@ -32,14 +32,14 @@ export function CompensationTable({ comp }: { comp: Compensation }) {
             </td>
           </tr>
           {comp.allowances.map((a, i) => (
-            <tr key={i} className="border-b border-line">
+            <tr key={i} className="border-b border-base-300">
               <td className="py-1.5">
                 <Bidi as="span" text={a.label_raw || a.kind} />
                 {a.basis === "per_day" && (
-                  <span className="ms-1 text-xs text-muted">per day</span>
+                  <span className="ms-1 text-xs text-base-content/60">per day</span>
                 )}
                 {a.basis === "percent_of_basic" && (
-                  <span className="ms-1 text-xs text-muted">% of basic</span>
+                  <span className="ms-1 text-xs text-base-content/60">% of basic</span>
                 )}
               </td>
               <td className="py-1.5 text-end">
@@ -48,7 +48,7 @@ export function CompensationTable({ comp }: { comp: Compensation }) {
             </tr>
           ))}
           {comp.pension_applies && est && (
-            <tr className="border-b border-line text-muted">
+            <tr className="border-b border-base-300 text-base-content/60">
               <td className="py-1.5">
                 Pension ({Math.round((comp.pension_rate || 0.07) * 100)}% of basic)
               </td>
@@ -70,7 +70,7 @@ export function CompensationTable({ comp }: { comp: Compensation }) {
           max={31}
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
-          className="w-16 rounded border border-line px-1.5 py-0.5"
+          className="input input-sm w-16"
         />
       </label>
 
@@ -78,12 +78,12 @@ export function CompensationTable({ comp }: { comp: Compensation }) {
         <p data-testid="net-total" className="text-base font-semibold">
           {est.is_floor ? "At least " : ""}~{formatMoney(Math.round(est.value),
                                                          comp.currency)}
-          <span className="ms-2 text-xs font-normal text-muted">
+          <span className="ms-2 text-xs font-normal text-base-content/60">
             estimated take-home, {days} working days
           </span>
         </p>
       ) : (
-        <p className="text-sm text-muted">
+        <p className="text-sm text-base-content/60">
           Not enough detail in the listing to estimate take-home pay.
         </p>
       )}

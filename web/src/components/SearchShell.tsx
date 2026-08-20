@@ -25,7 +25,7 @@ export function SearchShell({
         <Tabs state={state} onChange={go} />
       </div>
 
-      <p className="mt-3 text-xs text-muted">
+      <p className="mt-3 text-xs text-base-content/60">
         {data.total.toLocaleString()} results
       </p>
 
@@ -40,16 +40,16 @@ export function SearchShell({
                 type="button"
                 disabled={state.page <= 1}
                 onClick={() => go({ ...state, page: state.page - 1 })}
-                className="rounded border border-line px-3 py-1 disabled:opacity-40"
+                className="btn btn-sm"
               >
                 Previous
               </button>
-              <span className="text-muted">Page {state.page}</span>
+              <span className="text-base-content/60">Page {state.page}</span>
               <button
                 type="button"
                 disabled={state.page * state.per_page >= data.total}
                 onClick={() => go({ ...state, page: state.page + 1 })}
-                className="rounded border border-line px-3 py-1 disabled:opacity-40"
+                className="btn btn-sm"
               >
                 Next
               </button>

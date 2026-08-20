@@ -84,7 +84,7 @@ converting for its own sake is how a migration turns into a rewrite.
 | a submit or action `<button>` | `btn btn-sm` (`btn-primary` for the primary action) |
 | a text `<input>` | `input input-sm w-full` |
 | a `<select>` | `select select-sm` |
-| a checkbox `<input>` | `checkbox checkbox-sm` |
+| a checkbox `<input>` | `checkbox checkbox-sm` (with `.label` on the `<label>`; daisyui 5 has no `label-text`) |
 | a range `<input>` | `range range-sm` |
 | the tab strip | `tabs tabs-box` with `tab` / `tab-active` |
 | a `<table>` | `table table-sm` |
@@ -226,10 +226,16 @@ jj commit -m "web: daisyui theme, and a full-width collapsible replacing the Det
   `label-text`. The P6 measurements note that a long Thaana value does not break
   the checkbox alignment -- keep that true, and check it with a Thaana label.
 - [ ] **Step 2** `RangeFacet`: `range range-sm`. `ToggleFacet`: `toggle toggle-sm`.
-- [ ] **Step 3** `FacetPanel`: group each facet in a `collapse` using the
-  `Disclosure` from task 1 rather than a second collapse implementation.
-- [ ] **Step 4** `ReportForm`: `select select-sm`, `textarea textarea-sm`,
-  `btn btn-sm`. It already uses `Disclosure`; leave that call site alone.
+- [ ] ~~**Step 3** `FacetPanel`: group each facet in a `collapse`.~~
+  **WRONG, do not do this.** `FacetPanel.test.tsx:26` asserts
+  `getAllByRole("heading")` returns `["Brand", "Price", "Has photos"]`, and
+  `Disclosure` renders its label as a `<button>`, which deletes those headings.
+  Headings are how a screen-reader user navigates a facet panel, so this would
+  trade real a11y for collapsing a panel that does not need to collapse. Convert
+  its dead classes only and keep the `<section>`/`<h3>` structure.
+- [ ] **Step 4** `ReportForm`: `textarea textarea-sm`, `btn btn-sm`. It has no
+  `<select>` -- the five reasons are radios, which the mapping table does not
+  cover, so leave them. It already uses `Disclosure`; leave that call site alone.
 - [ ] **Step 5** `grep` for physical properties; `npx vitest run && npx tsc --noEmit`
 - [ ] **Step 6** `jj commit -m "web: facets and report form on daisyui"`
 
@@ -240,9 +246,10 @@ jj commit -m "web: daisyui theme, and a full-width collapsible replacing the Det
 **Files:** `detail/SpecTable.tsx`, `detail/CompensationTable.tsx`, `detail/ApplyBlock.tsx`, `detail/Gallery.tsx`
 **Test:** `ApplyBlock.test.tsx`, `CompensationTable.test.tsx`, unchanged.
 
-- [ ] **Step 1** Both tables become `table table-sm`. Keep the two-column
-  key/value shape; do not introduce `table-zebra`, which fights the muted
-  palette.
+- [ ] **Step 1** `CompensationTable` becomes `table table-sm`. **`SpecTable` is a
+  `<dl>`, not a `<table>`** -- rewriting a definition list as a table is a
+  structural change, not a restyle, so convert only its dead classes. Do not
+  introduce `table-zebra`, which fights the muted palette.
 - [ ] **Step 2** `ApplyBlock`: each apply method becomes `btn btn-sm`, with
   `btn-primary` on the first. Keep the `apply_kinds` ordering from spec 8.1.
 - [ ] **Step 3** `Gallery`: keep whatever it does now. DaisyUI's `carousel` is a
