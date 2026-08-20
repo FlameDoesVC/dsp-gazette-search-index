@@ -186,3 +186,41 @@ async def test_ollama_provider_sends_deterministic_options(settings):
     assert opts["top_k"] == 1
     assert opts["seed"] == 42
     assert http.calls[0][1]["json"]["think"] is False
+
+
+def test_ollama_token_counts_are_read_from_ollamas_own_field_names():
+    """Ollama has no `usage` object: the counts are prompt_eval_count and
+    eval_count at the top level. Reading DeepSeek's names against an ollama
+    reply produced '300 calls, 0 input tokens, 0% cache hit' after a real
+    300-document pass -- three numbers that look measured and are not."""
+    from enrich.client import _extract_usage
+
+    reply = {"model": "mistral:latest", "prompt_eval_count": 1180,
+             "eval_count": 267, "done": True}
+    usage = _extract_usage("ollama", reply)
+    assert usage["prompt_tokens"] == 1180
+    assert usage["completion_tokens"] == 267
+    assert usage["reported"] == 1
+    # There is no cache, so the caller must not print a cache percentage.
+    assert usage["cache_reported"] == 0
+
+
+def test_deepseek_cache_split_is_kept():
+    from enrich.client import _extract_usage
+
+    reply = {"usage": {"prompt_tokens": 3300, "completion_tokens": 267,
+                       "prompt_cache_hit_tokens": 3100,
+                       "prompt_cache_miss_tokens": 200}}
+    usage = _extract_usage("deepseek", reply)
+    assert usage["cache_hit_tokens"] == 3100
+    assert usage["cache_miss_tokens"] == 200
+    assert usage["cache_reported"] == 1
+
+
+def test_a_provider_that_reports_nothing_says_so():
+    """The distinction that matters: 'reported' separates a real zero from an
+    absent measurement."""
+    from enrich.client import _extract_usage
+
+    assert _extract_usage("ollama", {"done": True})["reported"] == 0
+    assert _extract_usage("deepseek", {})["reported"] == 0

@@ -26,7 +26,13 @@ class IulaanType(models.Model):
 class Iulaan(models.Model):
     id = models.CharField(max_length=255, primary_key=True)
     title = models.CharField(max_length=512)
-    translated_title = models.CharField(max_length=255, blank=True)
+    # As wide as `title`, and it has to be: a translation target narrower than
+    # its source cannot hold every translation. At 255 this raised DataError on
+    # a long title and, with no per-row handling in retranslate_gazette, took
+    # the whole pass down -- which is why 157 of 187 iulaan had no English
+    # title. English renderings of Thaana also run LONGER in characters, since
+    # Thaana writes vowels as diacritics, so the target must not be smaller.
+    translated_title = models.CharField(max_length=512, blank=True)
     office = models.ForeignKey(Office, null=True, blank=True, on_delete=models.PROTECT)
     iulaan_type = models.ForeignKey(IulaanType, null=True, blank=True, on_delete=models.PROTECT)
     additional_info = models.JSONField()

@@ -72,15 +72,23 @@ class Command(BaseCommand):
                 f"failed={counts['failed']} skipped={counts['skipped']}"
             ))
             usage = counts.get("usage") or {}
-            if usage.get("calls"):
-                per = usage["prompt_tokens"] / usage["calls"]
-                hit = usage["cache_hit_tokens"]
-                total_in = usage["prompt_tokens"] or 1
-                self.stdout.write(
-                    f"  {usage['calls']} calls, "
-                    f"{usage['prompt_tokens']:,} input tokens "
-                    f"({per:,.0f}/call, {100 * hit / total_in:.0f}% cache hit), "
-                    f"{usage['completion_tokens']:,} output tokens")
+            # Only report what the provider actually counted. Printing a zero
+            # here reads as "no tokens" when it means "not reported", and on
+            # ollama it produced "300 calls, 0 input tokens, 0% cache hit".
+            if usage.get("reported"):
+                per = usage["prompt_tokens"] / usage["reported"]
+                line = (f"  {usage['reported']} of {usage['calls']} calls "
+                        f"counted: {usage['prompt_tokens']:,} input tokens "
+                        f"({per:,.0f}/call)")
+                if usage.get("cache_reported"):
+                    total_in = usage["prompt_tokens"] or 1
+                    hit = 100 * usage["cache_hit_tokens"] / total_in
+                    line += f", {hit:.0f}% cache hit"
+                line += f", {usage['completion_tokens']:,} output tokens"
+                self.stdout.write(line)
+            elif usage.get("calls"):
+                self.stdout.write(f"  {usage['calls']} calls; the provider "
+                                  f"reported no token counts")
 
         # Deliberately does NOT clear stale_marked_at: reindex is the last
         # stage and the only one that clears the work ticket (spec 5.7).
