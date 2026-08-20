@@ -31,14 +31,14 @@ export function CardShell({
   const sourceUrl = (card.external_url as string) || result.url;
 
   return (
-    <article className="card">
+    <article className="card card-border bg-base-100 p-4">
       <div className="flex items-center justify-between gap-2 text-xs">
         <SourceBadge sourceKey={result.source} size="sm" />
         <a
           href={sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-muted hover:text-accent hover:underline"
+          className="text-base-content/60 hover:text-primary hover:underline"
         >
           View original <span aria-hidden="true">↗</span>
         </a>
@@ -58,7 +58,7 @@ export function CardShell({
             <Bidi
               as="p"
               text={summary}
-              className="mt-0.5 line-clamp-2 text-sm text-muted"
+              className="mt-0.5 line-clamp-2 text-sm text-base-content/60"
             />
           ) : null}
           {children}

@@ -20,11 +20,11 @@ export function NewsCard({ result }: { result: ResultOut }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="card block hover:border-accent"
+      className="card card-border bg-base-100 block hover:border-primary p-4"
     >
       <div className="flex items-center justify-between gap-2">
         <SourceBadge sourceKey={result.source} size="sm" />
-        <span className="text-xs text-muted">
+        <span className="text-xs text-base-content/60">
           {formatRelative(c.published_at as string)}
         </span>
       </div>
@@ -37,10 +37,10 @@ export function NewsCard({ result }: { result: ResultOut }) {
       <Bidi
         as="p"
         text={(c.summary as string) || result.summary}
-        className="mt-0.5 line-clamp-2 text-sm text-muted"
+        className="mt-0.5 line-clamp-2 text-sm text-base-content/60"
       />
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 text-xs text-muted">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 text-xs text-base-content/60">
         <Bidi as="span" text={c.office as string} />
         <Bidi as="span" text={c.announcement_type as string} />
         {(c.attachment_count as number) > 0 ? (

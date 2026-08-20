@@ -20,12 +20,12 @@ export function PropertyCard({ result }: { result: ResultOut }) {
           {c.rent_display as string}
           {c.currency_inferred ? (
             <span title="Currency inferred, not stated in the listing"
-                  className="ms-1 text-xs text-muted">
+                  className="ms-1 text-xs text-base-content/60">
               *
             </span>
           ) : null}
           {hero && (c.image_count as number) > 1 ? (
-            <span className="ms-2 text-xs font-normal text-muted">
+            <span className="ms-2 text-xs font-normal text-base-content/60">
               {(c.image_count as number)} photos
             </span>
           ) : null}
@@ -35,7 +35,7 @@ export function PropertyCard({ result }: { result: ResultOut }) {
       {/* Rendered exactly as the server computed it. Never reconstructed
           from `bedrooms` -- one room of three is not a 3-bedroom unit
           (spec 8.2). */}
-      <p data-testid="capacity" className="mt-0.5 text-sm text-muted">
+      <p data-testid="capacity" className="mt-0.5 text-sm text-base-content/60">
         {c.capacity_display as string}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-1">
@@ -44,12 +44,12 @@ export function PropertyCard({ result }: { result: ResultOut }) {
             key={t}
             as="span"
             text={t}
-            className="rounded bg-chip px-1.5 py-0.5 text-[11px]"
+            className="badge badge-sm"
           />
         ))}
       </div>
       <Disclosure label="Details">
-        <dl className="space-y-1 text-sm text-muted">
+        <dl className="space-y-1 text-sm text-base-content/60">
           {c.bedrooms != null && (
             <div className="flex justify-between gap-4"><dt>Bedrooms</dt><dd>{c.bedrooms as number}</dd></div>
           )}

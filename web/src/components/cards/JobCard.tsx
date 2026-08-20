@@ -26,9 +26,9 @@ const APPLY_ICON: Record<string, string> = {
 };
 
 const DEADLINE_TONE: Record<string, string> = {
-  open: "text-muted",
+  open: "text-base-content/60",
   closing_soon: "text-amber-700",
-  closed: "text-muted line-through",
+  closed: "text-base-content/60 line-through",
 };
 
 export function JobCard({ result }: { result: ResultOut }) {
@@ -49,9 +49,9 @@ export function JobCard({ result }: { result: ResultOut }) {
         <>{c.salary_display as string}</>
       }
     >
-      <Bidi as="p" text={c.employer as string} className="text-sm text-muted" />
+      <Bidi as="p" text={c.employer as string} className="text-sm text-base-content/60" />
       {est && (
-        <p data-testid="net-estimate" className="mt-0.5 text-xs text-muted">
+        <p data-testid="net-estimate" className="mt-0.5 text-xs text-base-content/60">
           {est.is_floor ? "at least " : ""}
           {formatApprox(est.value)} take-home{" "}
           <button
@@ -65,12 +65,12 @@ export function JobCard({ result }: { result: ResultOut }) {
         </p>
       )}
       {showAssumptions && est && (
-        <p className="mt-1 rounded bg-chip px-2 py-1 text-xs text-muted">
+        <p className="mt-1 rounded bg-base-200 px-2 py-1 text-xs text-base-content/60">
           Estimated from the stated line items over {est.working_days} working days,
           less 7% pension on basic salary. Not a figure the employer stated.
         </p>
       )}
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/60">
         {c.grade ? <span>{c.grade as string}</span> : null}
         {c.position_type ? <span>{c.position_type as string}</span> : null}
         <Bidi as="span" text={c.location as string} />
@@ -83,7 +83,7 @@ export function JobCard({ result }: { result: ResultOut }) {
           </span>
         ) : null}
         {c.detail_source === "attachment" ? (
-          <span className="rounded bg-chip px-1.5 py-0.5">
+          <span className="badge badge-sm">
             Details from attached document
           </span>
         ) : null}
@@ -95,7 +95,7 @@ export function JobCard({ result }: { result: ResultOut }) {
               key={k}
               aria-label={APPLY_LABEL[k] ?? k}
               title={APPLY_LABEL[k] ?? k}
-              className="grid h-6 w-6 place-items-center rounded bg-chip text-xs"
+              className="grid h-6 w-6 place-items-center rounded bg-base-200 text-xs"
             >
               {APPLY_ICON[k] ?? "•"}
             </span>
@@ -106,7 +106,7 @@ export function JobCard({ result }: { result: ResultOut }) {
         {(c.qualifications as string[])?.length > 0 && (
           <div className="mb-2">
             <h4 className="text-xs font-semibold">Qualifications</h4>
-            <ul className="mt-1 space-y-0.5 text-sm text-muted">
+            <ul className="mt-1 space-y-0.5 text-sm text-base-content/60">
               {(c.qualifications as string[]).map((q) => (
                 <li key={q}>{q}</li>
               ))}
@@ -116,7 +116,7 @@ export function JobCard({ result }: { result: ResultOut }) {
         {(c.required_documents as string[])?.length > 0 && (
           <div className="mb-2">
             <h4 className="text-xs font-semibold">Required documents</h4>
-            <ul className="mt-1 space-y-0.5 text-sm text-muted">
+            <ul className="mt-1 space-y-0.5 text-sm text-base-content/60">
               {(c.required_documents as string[]).map((d) => (
                 <li key={d}>{d}</li>
               ))}
