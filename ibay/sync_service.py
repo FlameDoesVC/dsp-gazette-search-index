@@ -261,7 +261,8 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
             )
             if response.status_code in (301, 404):
                 await Product.objects.filter(id=product_id).aupdate(
-                    status="ERROR", error_message=f"Status: {response.status_code}"
+                    status="ERROR", error_message=f"Status: {response.status_code}",
+                    updated_at=datetime.now(timezone.utc),
                 )
                 return
             if response.status_code != 200:
@@ -273,7 +274,8 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
             if soup.find("font", class_="pagetitle", string="Listing disabled") or \
                soup.find("p", class_="pagetitle", string="Listing not found"):
                 await Product.objects.filter(id=product_id).aupdate(
-                    status="ERROR", error_message="Listing disabled or not found"
+                    status="ERROR", error_message="Listing disabled or not found",
+                    updated_at=datetime.now(timezone.utc),
                 )
                 logger.warning("Listing %d not available.", listing_id)
                 return
@@ -364,6 +366,11 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
                 await ensure_category_hierarchy(client, raw_cats)
 
             # ---- Update product ----
+            # `updated_at` is auto_now, and auto_now is applied by Model.save(),
+            # not by QuerySet.update(). Without setting it by hand every refresh
+            # left the timestamp untouched, so a product that went stale stayed
+            # stale forever and update_stale_products re-fetched the same oldest
+            # rows every cycle.
             await Product.objects.filter(id=product_id).aupdate(
                 seller_id=seller_id,
                 price=price,
@@ -371,6 +378,7 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
                 description=description,
                 last_updated=last_updated,
                 status="SCRAPED",
+                updated_at=datetime.now(timezone.utc),
             )
 
             # ---- Link categories ----
@@ -399,7 +407,8 @@ async def fetch_product_detail(client, sem, product_id, listing_id, name, url):
         except Exception:
             logger.exception("Error processing %s", url)
             await Product.objects.filter(id=product_id).aupdate(
-                status="ERROR", error_message="Exception during scrape"
+                status="ERROR", error_message="Exception during scrape",
+                updated_at=datetime.now(timezone.utc),
             )
 
 
