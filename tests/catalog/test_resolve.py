@@ -250,3 +250,32 @@ def test_identity_stopwords_are_derived_from_document_frequency(db):
     clear_stopword_cache()
     assert "PS9" in sw           # in all four listings
     assert "X100" not in sw      # in exactly one
+
+
+@pytest.mark.django_db
+def test_a_pass_prunes_entities_that_kept_no_listings():
+    """Changing identity extraction re-keys entities and abandons the old rows.
+    They inflate the entity count the profiling spend is estimated from, and
+    build_profiles selects them before finding they have nothing to profile."""
+    from catalog.models import Entity
+    from catalog.resolve import resolve_source
+
+    abandoned = Entity.objects.create(
+        kind="product", key="stale-key-with-no-links", model_name="GONE-1")
+    counts = resolve_source("ibay")
+
+    assert counts["pruned"] >= 1
+    assert not Entity.objects.filter(id=abandoned.id).exists()
+
+
+@pytest.mark.django_db
+def test_a_dry_run_prunes_nothing():
+    from catalog.models import Entity
+    from catalog.resolve import resolve_source
+
+    abandoned = Entity.objects.create(
+        kind="product", key="stale-key-dry-run", model_name="GONE-2")
+    counts = resolve_source("ibay", dry_run=True)
+
+    assert "pruned" not in counts
+    assert Entity.objects.filter(id=abandoned.id).exists()

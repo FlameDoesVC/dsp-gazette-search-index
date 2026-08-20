@@ -21,6 +21,12 @@ _MARKETING = re.compile(
     r"bml|transfer|urgent|limited|hot|deal)\b", re.I)
 _SEPARATORS = re.compile(r"[|:;,\.\(\)\[\]♦♥*#]+")
 _WS = re.compile(r"\s+")
+# 'Pro+' is a different phone from 'Pro'. The glyph is dropped by tokenizing, so
+# 'REDMI NOTE 15 PRO+' and 'REDMI NOTE 15 PRO' both produced NOTE-15-PRO and
+# landed in one entity. Only a '+' bound to a letter is a qualifier: in
+# '8+256GB' it separates RAM from storage, and in 'Case + Screen Protector' it
+# is a conjunction.
+_PLUS_SUFFIX = re.compile(r"(?<=[A-Za-z])\+")
 
 # A model token carries a digit: RL-S07100C, A15, 128GB, 200W.
 _MODEL_TOKEN = re.compile(r"^(?=.*\d)[A-Za-z0-9][A-Za-z0-9\-/\.]{1,23}$")
@@ -67,7 +73,12 @@ def compound_tokens(text: str) -> list[str]:
         if word.lower() in _NOT_A_LINE or _BARE_YEAR.match(number):
             continue
         parts = [word.upper(), number]
-        parts += [q.upper() for q in qualifiers.split()]
+        for qualifier in qualifiers.split():
+            # 'Note 14 Pro+ Plus' writes the same qualifier twice, and after
+            # _PLUS_SUFFIX so does 'Pro+ Plus'. A repeat is emphasis, not a
+            # further variant.
+            if parts[-1] != qualifier.upper():
+                parts.append(qualifier.upper())
         token = "-".join(parts)
         if token not in out:
             out.append(token)
@@ -76,6 +87,7 @@ def compound_tokens(text: str) -> list[str]:
 
 def clean_title(text: str) -> str:
     out = strip_phones(text or "")
+    out = _PLUS_SUFFIX.sub(" PLUS", out)
     out = _MARKETING.sub(" ", out)
     out = _SEPARATORS.sub(" ", out)
     return _WS.sub(" ", out).strip(" -_")

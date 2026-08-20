@@ -18,3 +18,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"{counts['seen']} seen, {counts['linked']} linked, "
             f"{counts['missed']} missed ({rate:.1f}%)"))
+        if counts.get("pruned"):
+            self.stdout.write(
+                f"pruned {counts['pruned']} entities left with no listings")

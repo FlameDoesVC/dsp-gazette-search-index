@@ -202,3 +202,31 @@ def test_a_compound_is_exempt_from_the_frequency_filter():
     from catalog.identity import discriminating_tokens
     assert discriminating_tokens(["IPHONE-11"], {"IPHONE-11"}) == ["IPHONE-11"]
     assert discriminating_tokens(["PS5"], {"PS5"}) == []
+
+
+def test_a_plus_glyph_is_a_qualifier_not_punctuation():
+    """'Redmi Note 15 Pro' and 'Redmi Note 15 Pro+' are different phones.
+    Tokenizing dropped the glyph, so both produced NOTE-15-PRO and 29 listings
+    across both models landed in one entity."""
+    from catalog.identity import compound_tokens
+    assert compound_tokens("REDMI NOTE 15 PRO 256GB/8GB 4G") == ["NOTE-15-PRO"]
+    assert compound_tokens("REDMI NOTE 15 PRO+ 512GB/12GB 5G") == [
+        "NOTE-15-PRO-PLUS"]
+
+
+def test_a_repeated_qualifier_is_emphasis():
+    """One real title writes it both ways at once."""
+    from catalog.identity import compound_tokens
+    assert compound_tokens("REDMI NOTE 14 PRO+ PLUS 5G 512GB/12GB RAM") == [
+        "NOTE-14-PRO-PLUS"]
+
+
+@pytest.mark.parametrize("title,expected", [
+    # '+' between two capacities is a separator, not a qualifier.
+    ("Redmi 15 8+256GB Global", ["REDMI-15"]),
+    # '+' with spaces around it is a conjunction listing two products.
+    ("Apple iPhone 14 Cover Case + Tempered Glass", ["IPHONE-14"]),
+])
+def test_a_plus_that_is_not_bound_to_a_word_is_left_alone(title, expected):
+    from catalog.identity import compound_tokens
+    assert compound_tokens(title) == expected

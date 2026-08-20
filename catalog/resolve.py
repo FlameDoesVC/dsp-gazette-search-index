@@ -171,4 +171,11 @@ def resolve_source(source: str, *, limit=None, dry_run=False) -> dict:
                                   stopwords=stopwords)
         counts["linked" if entity else "missed"] += 1
     recount()
+    if not dry_run:
+        # A change to identity extraction re-keys entities, and the rows under
+        # the old keys are left holding nothing. They are not harmless: they
+        # inflate the entity count that the profiling spend is estimated from,
+        # and build_profiles selects them before discovering they have no
+        # listings to profile.
+        counts["pruned"] = Entity.objects.filter(links__isnull=True).delete()[0]
     return counts
