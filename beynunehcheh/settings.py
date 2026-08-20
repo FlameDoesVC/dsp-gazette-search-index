@@ -249,34 +249,53 @@ ENRICH_PROVIDER = os.getenv("ENRICH_PROVIDER", "deepseek")
 ENRICH_MODEL = os.getenv("ENRICH_MODEL", "deepseek-v4-flash")
 ENRICH_MODEL_ESCALATION = os.getenv("ENRICH_MODEL_ESCALATION", "deepseek-v4-pro")
 ENRICH_MODEL_LOCAL = os.getenv("ENRICH_MODEL_LOCAL", "qwen3.5:4b")
-# Ollama defaults to 4,096 whatever the model advertises -- qwen2.5:7b loaded at
-# 4,096 against a declared 32,768 -- and truncates a longer prompt silently
-# rather than failing, so the ceiling has to be set here where it is visible.
+# One context size per PASS, not one for everything, because the two passes
+# differ by a factor of five and a single value serves the worse of both.
 #
-# Measured one model at a time with nothing else on the GPU and the weight-load
-# call excluded from the timing:
+# Enrichment prompts are small: the largest measured is a job at 8,569
+# characters. Profiles are not: about 20,200 characters, because
+# CATALOG_PROFILE_MAX_LISTINGS packs 12 listings in.
 #
-#   gemmatranslate:12b   4,096: 6.34s/doc 16/16    8,192: 6.39s/doc 16/16
-#   mistral:latest       4,096: 3.93s/doc 16/16    8,192: 4.01s/doc 16/16
+# Setting one global 16,384 to make profiles fit is what broke the enrichment
+# pass. Ollama allocates KV cache PER PARALLEL SLOT, so 16,384 across
+# ENRICH_CONCURRENCY=8 slots is 131,072 tokens of cache; it stops fitting, the
+# requests queue behind fewer slots than expected, and they pass ENRICH_TIMEOUT
+# and die. 35 first-attempt failures in the first 262 job documents, all of them
+# httpx timeouts. The earlier 16-document benchmark at concurrency 4 never
+# applied enough slot pressure to show it.
 #
-# So the window costs about 1% of throughput and nothing in reliability, and
-# 8,192 is the right default rather than a luxury: it clears the worst measured
-# gazette prompt (10,404 characters, and Thaana tokenizes at closer to 2
-# characters per token than the 3.6 Latin manages) as well as every iBay one.
+# Ollama also ignores what the model advertises -- qwen2.5:7b loaded at 4,096
+# against a declared 32,768 -- and truncates a longer prompt silently, so both
+# numbers are set explicitly and enrich.client warns when a prompt exceeds one.
+ENRICH_LOCAL_NUM_CTX = int(os.getenv("ENRICH_LOCAL_NUM_CTX", "4096"))
+CATALOG_PROFILE_NUM_CTX = int(os.getenv("CATALOG_PROFILE_NUM_CTX", "16384"))
+# Characters per token, for the overflow warning only. Calibrated against
+# ollama's own prompt_eval_count rather than guessed: 11 iBay job calls reported
+# 24,182 input tokens for prompts of about 7,098 characters, so 3.2 for that
+# mix. 2.8 keeps a margin for heavier Thaana without crying wolf -- at the
+# earlier guess of 2.2 the warning fired on ordinary 9,272-character job
+# prompts that use only ~2,900 tokens, and a warning that fires on healthy
+# input across 34,000 documents just teaches everyone to ignore it.
+ENRICH_CHARS_PER_TOKEN = float(os.getenv("ENRICH_CHARS_PER_TOKEN", "2.8"))
+# A generation cap, because an uncapped one is unbounded in TIME as well as
+# length. Given `format: json` and a nested schema, mistral sometimes falls into
+# a repetition loop and keeps emitting until it fills num_ctx -- a single iBay
+# JOB document took 282 seconds and others passed the 300s mark, at concurrency
+# 1, with a prompt of only 7,000 characters. It is not the window and it is not
+# concurrency: it is one request generating thousands of tokens of nothing.
 #
-# An earlier version of this comment claimed 8,192 made gemmatranslate four
-# times slower with five failures in sixteen. That measurement was taken with
-# two benchmark processes competing for one GPU and both models resident at
-# once; it measured the contention, not the window. Left recorded here because a
-# plausible wrong number in a config comment outlives the mistake that made it.
-#
-# The profile pass does NOT fit either way: its prompts run about 20,200
-# characters, so see CATALOG_PROFILE_MAX_LISTINGS.
-ENRICH_LOCAL_NUM_CTX = int(os.getenv("ENRICH_LOCAL_NUM_CTX", "8192"))
-# Characters per token used only for that warning. Latin runs about 3.6; this is
-# deliberately pessimistic so mixed Thaana trips the warning rather than sailing
-# past it.
-ENRICH_CHARS_PER_TOKEN = float(os.getenv("ENRICH_CHARS_PER_TOKEN", "2.2"))
+# Measured over the 276 job and 328 shopping records that did succeed: outputs
+# run to a median of 1,055 and 810 characters, p90 of 1,395 and 1,245, and a
+# maximum of 1,911 and 2,840 -- about 950 tokens at the very worst. 1,536 leaves
+# real headroom over that while cutting a runaway off inside the timeout instead
+# of letting it hold a slot for five minutes.
+ENRICH_NUM_PREDICT = int(os.getenv("ENRICH_NUM_PREDICT", "1536"))
+# Local concurrency, separate from the paid path. A remote API really does serve
+# 8 at once; ollama serves a couple and queues the rest, and a queued request
+# expires rather than waiting politely. Measured: concurrency 4 and 8 gave
+# IDENTICAL throughput (6.51 vs 6.67 s/doc), so anything above the server's slot
+# count buys nothing and only manufactures timeouts.
+ENRICH_LOCAL_CONCURRENCY = int(os.getenv("ENRICH_LOCAL_CONCURRENCY", "2"))
 ENRICH_CONCURRENCY = int(os.getenv("ENRICH_CONCURRENCY", "8"))
 ENRICH_TIMEOUT = float(os.getenv("ENRICH_TIMEOUT", "120"))
 # translate.py already caps gazette bodies at 3,500 chars; match it.

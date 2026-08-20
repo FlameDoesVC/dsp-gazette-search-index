@@ -198,3 +198,50 @@ def test_failed_records_are_retried_up_to_the_attempt_cap():
 
     EnrichedRecord.objects.update(attempts=5)
     assert list(select_keys(source="ibay", prompt_version=1)) == []
+
+
+# transaction=True: enrich_one writes through sync_to_async, which runs on a
+# worker-thread connection outside the test transaction, so the row COMMITS.
+# Without this it survives the test and breaks a later one that asserts an empty
+# EnrichedRecord table.
+@pytest.mark.django_db(transaction=True)
+def test_enrichment_never_stores_dhivehi(monkeypatch):
+    """mistral:latest cannot write Dhivehi. Asked for summary_dv it emits a
+    plausible-looking Thaana phrase and repeats it -- one real output looped
+    `މިރަސްކަލާ` ("the Lord") twenty times. Measured over 751 records: 20 of 20
+    Dhivehi values were unusable, 0 of 1,510 English ones were.
+
+    It is stored garbage rather than a visible failure that makes this matter. A
+    loop that closes its quote in time is valid JSON, passes every other check,
+    and publishes as though it were a real summary.
+    """
+    import asyncio
+    from enrich.pipeline import EnrichInput, enrich_one
+    from enrich.preextract import extract_candidates
+
+    loop = "އަރުއްތަލުގައި މިރަސްކަލާ " * 12
+
+    class _Client:
+        async def run_chain(self, messages, rebuild=None):
+            return {
+                "doc_type": "shopping",
+                "doc_type_confidence": 1.0,
+                "canonical_title_en": "Office chair",
+                "canonical_title_dv": loop,
+                "summary_en": "A chair.",
+                "summary_dv": loop,
+                "attrs": {},
+                "keywords": [],
+            }, "mistral:latest"
+
+    inp = EnrichInput(source="ibay", source_key="dv1", doc_type_prior="shopping",
+                      title="Office chair", body="A chair for sale.",
+                      scraped={}, candidates=extract_candidates("A chair."),
+                      content_hash="h1")
+    record = asyncio.run(enrich_one(inp, _Client()))
+
+    assert record.canonical_title_dv == ""
+    assert record.summary_dv == ""
+    # The English side is untouched.
+    assert record.canonical_title_en == "Office chair"
+    assert record.summary_en == "A chair."

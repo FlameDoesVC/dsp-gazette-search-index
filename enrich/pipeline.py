@@ -211,9 +211,23 @@ async def enrich_one(inp: EnrichInput, client) -> EnrichedRecord:
     record.doc_type = doc_type
     record.doc_type_confidence = out.doc_type_confidence
     record.canonical_title_en = out.canonical_title_en[:512]
-    record.canonical_title_dv = out.canonical_title_dv[:512]
     record.summary_en = out.summary_en[:240]
-    record.summary_dv = out.summary_dv[:240]
+    # Enrichment never writes Dhivehi, whatever the model returned. Measured
+    # over 751 records: every one of the 20 Dhivehi values mistral:latest
+    # produced was unusable -- repeated Thaana phrases chosen for their shape,
+    # one of them looping `މިރަސްކަލާ` ("the Lord") twenty times. Nought of
+    # 1,510 English values were degenerate, and DeepSeek never attempted
+    # Dhivehi at all, which is why this stayed hidden on the paid provider.
+    #
+    # A repetition score cannot separate the two classes: legitimate English
+    # reaches 0.333 ('PCIe Adapter NVME/M2 PCIe Adapter SSD M2 to SATA') while
+    # the Dhivehi garbage runs down to 0.261. Capability is the real signal, and
+    # translation already has a stage of its own -- core/translate.py with a
+    # translator model and a script guard, then fill_bilingual. This field was
+    # always duplicating it, and enrich/overlay.py would happily overwrite a
+    # real gazette Dhivehi summary with the model's invention.
+    record.canonical_title_dv = ""
+    record.summary_dv = ""
     record.attrs = attrs_model.model_dump()
     record.keywords = out.keywords[:20]
     record.model_name = model_name
@@ -282,7 +296,14 @@ async def run_pass(
     keys: list[tuple[str, str]], *, concurrency: int | None = None
 ) -> dict:
     """Run `keys` through the model with a bounded semaphore."""
-    sem = asyncio.Semaphore(concurrency or settings.ENRICH_CONCURRENCY)
+    # The local provider queues rather than parallelising, and a queued request
+    # expires instead of waiting, so it gets its own limit. ENRICH_CONCURRENCY
+    # is right for a remote API and wrong for one GPU.
+    if concurrency is None:
+        concurrency = (settings.ENRICH_LOCAL_CONCURRENCY
+                       if settings.ENRICH_PROVIDER == "ollama"
+                       else settings.ENRICH_CONCURRENCY)
+    sem = asyncio.Semaphore(concurrency)
     client = EnrichClient()
     counts = {"ok": 0, "needs_review": 0, "failed": 0, "skipped": 0}
 

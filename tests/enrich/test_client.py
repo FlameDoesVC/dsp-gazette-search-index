@@ -224,3 +224,44 @@ def test_a_provider_that_reports_nothing_says_so():
 
     assert _extract_usage("ollama", {"done": True})["reported"] == 0
     assert _extract_usage("deepseek", {})["reported"] == 0
+
+
+def test_an_error_names_its_exception_type():
+    """str(httpx.ReadTimeout()) is "", so formatting the exception alone gave
+    'ollama/mistral:latest: ' with nothing after the colon. 35 timeouts arrived
+    looking identical to empty replies, which sent the diagnosis after the model
+    instead of the timeout."""
+    import httpx
+    import pytest as _pytest
+    from enrich.client import EnrichClient, ProviderError
+
+    class _Boom:
+        async def post(self, url, **kwargs):
+            raise httpx.ReadTimeout("")
+
+        async def aclose(self):
+            pass
+
+    async def _run():
+        client = EnrichClient(http=_Boom())
+        with _pytest.raises(ProviderError) as excinfo:
+            await client.complete([{"role": "user", "content": "x"}],
+                                  provider="ollama", model="m")
+        return str(excinfo.value)
+
+    import asyncio
+    message = asyncio.run(_run())
+    assert "ReadTimeout" in message
+    # And it must not end in a bare dangling colon.
+    assert not message.rstrip().endswith(":")
+
+
+def test_num_ctx_is_per_client_not_global(settings):
+    """Enrichment and profiling differ by 5x in prompt size. One global value
+    serves the worse of both, and ollama's per-slot KV cache makes the oversized
+    choice actively harmful rather than merely wasteful."""
+    from enrich.client import EnrichClient
+
+    settings.ENRICH_LOCAL_NUM_CTX = 4096
+    assert EnrichClient().num_ctx == 4096
+    assert EnrichClient(num_ctx=16384).num_ctx == 16384

@@ -83,9 +83,14 @@ def _extract_content(provider: str, payload: dict) -> str:
 
 
 class EnrichClient:
-    def __init__(self, http=None):
+    def __init__(self, http=None, num_ctx=None):
         self._http = http
         self._owns_http = http is None
+        # Per pass, not global. Enrichment prompts are small and profiles are
+        # five times bigger; one value serves the worse of both, and the KV
+        # cache ollama allocates per parallel slot makes the oversized choice
+        # actively harmful. See ENRICH_LOCAL_NUM_CTX.
+        self._num_ctx = num_ctx
         self.usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0,
                       "cache_hit_tokens": 0, "cache_miss_tokens": 0,
                       "reported": 0, "cache_reported": 0}
@@ -122,19 +127,22 @@ class EnrichClient:
         self._record_usage("deepseek", payload)
         return _extract_content("deepseek", payload)
 
-    @staticmethod
-    def _warn_if_prompt_overflows(messages: list[dict], model: str) -> None:
+    @property
+    def num_ctx(self) -> int:
+        return self._num_ctx or settings.ENRICH_LOCAL_NUM_CTX
+
+    def _warn_if_prompt_overflows(self, messages: list[dict], model: str) -> None:
         """Ollama cuts an oversized prompt without saying so, and a prompt
         missing its schema or its body still returns confident-looking JSON. A
         warning is the only thing standing between that and a silently degraded
         corpus."""
         chars = sum(len(m.get("content") or "") for m in messages)
-        budget = settings.ENRICH_LOCAL_NUM_CTX * settings.ENRICH_CHARS_PER_TOKEN
+        budget = self.num_ctx * settings.ENRICH_CHARS_PER_TOKEN
         if chars > budget:
             logger.warning(
                 "prompt is %d chars, over the ~%d that fit %s's %d-token "
                 "context; ollama will truncate it silently",
-                chars, int(budget), model, settings.ENRICH_LOCAL_NUM_CTX)
+                chars, int(budget), model, self.num_ctx)
 
     async def _call_ollama(self, messages: list[dict], model: str) -> str:
         self._warn_if_prompt_overflows(messages, model)
@@ -152,8 +160,13 @@ class EnrichClient:
                 # longer prompt silently, so the ceiling is set explicitly and
                 # _warn_if_prompt_overflows says so when a prompt exceeds it.
                 # See ENRICH_LOCAL_NUM_CTX for the measurements.
+                # num_predict is not optional. Uncapped, a repetition loop
+                # generates until it fills num_ctx, which is unbounded in time:
+                # one job document held a slot for 282 seconds. See
+                # ENRICH_NUM_PREDICT for the output sizes it is derived from.
                 "options": {"temperature": 0, "top_k": 1, "seed": 42,
-                            "num_ctx": settings.ENRICH_LOCAL_NUM_CTX},
+                            "num_ctx": self.num_ctx,
+                            "num_predict": settings.ENRICH_NUM_PREDICT},
             },
         )
         r.raise_for_status()
@@ -169,7 +182,14 @@ class EnrichClient:
             else:
                 content = await self._call_deepseek(messages, model)
         except Exception as exc:                       # network, 4xx, 5xx
-            raise ProviderError(f"{provider}/{model}: {exc}") from exc
+            # The TYPE, not just the message. str(httpx.ReadTimeout()) is "",
+            # so formatting the exception alone produced "ollama/mistral:latest:"
+            # with nothing after the colon -- 35 failures that were
+            # indistinguishable from an empty reply and cost a round of guessing
+            # about the model when the answer was the timeout.
+            raise ProviderError(
+                f"{provider}/{model}: {type(exc).__name__}: {exc}".rstrip(": ")
+            ) from exc
 
         if not content.strip():
             raise ProviderError(f"{provider}/{model}: empty content")

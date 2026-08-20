@@ -32,7 +32,7 @@ from enrich.schemas import ATTRS_FOR_TYPE, schema_text
 # Bump when the instructions or the schemas change in a way that would produce
 # different output. Spec 4.2: a bump re-enriches iBay, and deliberately does
 # NOT backfill gazette (spec 5.7).
-PROMPT_VERSION = 3
+PROMPT_VERSION = 4
 
 _INSTRUCTIONS = """\
 You extract structured data from Maldivian classified listings and government \
@@ -65,10 +65,12 @@ do override it, name the correct type in `doc_type` and return `attrs` as an \
 empty object: the schema you would need is not in front of you, and attrs \
 shaped like the wrong schema is worse than nothing. You will be asked again \
 with the right schema.
-8. Write `summary_en` and `summary_dv` as one useful sentence of at most 240 \
-characters each. For a news document the summary is the entire product, so make \
-it say what actually happened, not what kind of document it is. Leave the \
-Dhivehi fields empty if the source has no Dhivehi.
+8. Write `summary_en` as one useful sentence of at most 240 characters. For a \
+news document the summary is the entire product, so make it say what actually \
+happened, not what kind of document it is.
+8a. NEVER write Dhivehi. Leave `canonical_title_dv` and `summary_dv` as empty \
+strings, always, even when the source is in Dhivehi. Translation is a separate \
+stage with a translator model; you are not it.
 9. `required_documents` lists what an applicant must attach -- ID copy, \
 accredited certificates, CV, reference letters, police report. One short \
 string each, copied from the source. It is not the same as `qualifications`, \

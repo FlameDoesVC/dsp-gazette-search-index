@@ -192,7 +192,11 @@ def select_entity_ids(*, kind=None, force=False, limit=None) -> list[int]:
 
 async def run_profile_pass(entity_ids: list[int], *, concurrency=None) -> dict:
     sem = asyncio.Semaphore(concurrency or settings.ENRICH_CONCURRENCY)
-    client = EnrichClient()
+    # A profile prompt is about 20,200 characters against enrichment's largest
+    # of 8,569, so it needs its own window. Sharing one global value is what
+    # made 16,384 apply to the enrichment pass, where the per-slot KV cache it
+    # implies across 8 concurrent calls stopped fitting and requests timed out.
+    client = EnrichClient(num_ctx=settings.CATALOG_PROFILE_NUM_CTX)
     counts = {"ok": 0, "failed": 0, "skipped": 0}
 
     async def _one(entity_id: int):
