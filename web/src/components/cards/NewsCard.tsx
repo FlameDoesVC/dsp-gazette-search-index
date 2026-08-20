@@ -4,6 +4,7 @@ import { Bidi } from "@/components/Bidi";
 import { SourceBadge } from "@/components/SourceBadge";
 import type { ResultOut } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { ProfileNote, SimilarCount } from "./EntityMeta";
 
 /**
  * Four things and nothing else: icon, title, excerpt, link out. Spec 8.4.
@@ -47,6 +48,12 @@ export function NewsCard({ result }: { result: ResultOut }) {
           <span>{c.attachment_count as number} documents</span>
         ) : null}
       </div>
+      <SimilarCount count={c.listing_count as number | undefined} />
+      <ProfileNote
+        tier={c.profile_tier as string | undefined}
+        inferredCount={c.inferred_count as number | undefined}
+        fieldCount={c.field_count as number | undefined}
+      />
     </a>
   );
 }

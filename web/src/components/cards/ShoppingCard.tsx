@@ -5,6 +5,7 @@ import { Disclosure } from "@/components/Disclosure";
 import { SpecTable } from "@/components/detail/SpecTable";
 import type { ResultOut } from "@/lib/api";
 import { CardShell } from "./CardShell";
+import { ProfileNote, SimilarCount } from "./EntityMeta";
 
 export function ShoppingCard({ result }: { result: ResultOut }) {
   const c = result.card as Record<string, never>;
@@ -50,6 +51,12 @@ export function ShoppingCard({ result }: { result: ResultOut }) {
           <p className="mt-1 text-sm text-base-content/60">Seller: {c.seller_name as string}</p>
         )}
       </Disclosure>
+      <SimilarCount count={c.listing_count as number | undefined} />
+      <ProfileNote
+        tier={c.profile_tier as string | undefined}
+        inferredCount={c.inferred_count as number | undefined}
+        fieldCount={c.field_count as number | undefined}
+      />
     </CardShell>
   );
 }

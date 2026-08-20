@@ -4,6 +4,7 @@ import { Bidi } from "@/components/Bidi";
 import { Disclosure } from "@/components/Disclosure";
 import type { ResultOut } from "@/lib/api";
 import { CardShell } from "./CardShell";
+import { ProfileNote, SimilarCount } from "./EntityMeta";
 
 export function PropertyCard({ result }: { result: ResultOut }) {
   const c = result.card as Record<string, never>;
@@ -70,6 +71,12 @@ export function PropertyCard({ result }: { result: ResultOut }) {
           )}
         </dl>
       </Disclosure>
+      <SimilarCount count={c.listing_count as number | undefined} />
+      <ProfileNote
+        tier={c.profile_tier as string | undefined}
+        inferredCount={c.inferred_count as number | undefined}
+        fieldCount={c.field_count as number | undefined}
+      />
     </CardShell>
   );
 }

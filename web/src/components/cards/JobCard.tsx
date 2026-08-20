@@ -8,6 +8,7 @@ import { formatApprox, formatDate } from "@/lib/format";
 import { ApplyBlock } from "@/components/detail/ApplyBlock";
 import { CompensationTable } from "@/components/detail/CompensationTable";
 import { CardShell } from "./CardShell";
+import { ProfileNote, SimilarCount } from "./EntityMeta";
 
 const APPLY_LABEL: Record<string, string> = {
   form: "Apply via form",
@@ -130,6 +131,12 @@ export function JobCard({ result }: { result: ResultOut }) {
           kind: string; value: string; label_en?: string; label_dv?: string;
         }[]) ?? []} />
       </Disclosure>
+      <SimilarCount count={c.listing_count as number | undefined} />
+      <ProfileNote
+        tier={c.profile_tier as string | undefined}
+        inferredCount={c.inferred_count as number | undefined}
+        fieldCount={c.field_count as number | undefined}
+      />
     </CardShell>
   );
 }
