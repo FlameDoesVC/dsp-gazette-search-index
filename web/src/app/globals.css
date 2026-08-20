@@ -1,4 +1,24 @@
 @import "tailwindcss";
+/* SPIKE, throwaway. Evaluating whether daisyui can carry this frontend given
+   that direction flips per element rather than per page. */
+@plugin "daisyui" {
+  themes: false;
+}
+/* The existing eight tokens, expressed as a daisyui theme rather than beside
+   one. If the palette cannot survive this mapping the migration is not worth
+   doing, so it is the first thing the spike tests. */
+@plugin "daisyui/theme" {
+  name: "beynunehcheh";
+  default: true;
+  --color-base-100: #ffffff;   /* was --color-bg */
+  --color-base-200: #eef1f4;   /* was --color-chip */
+  --color-base-300: #e2e6ea;   /* was --color-line */
+  --color-base-content: #101418;  /* was --color-fg */
+  --color-primary: #1a6dd6;    /* was --color-accent */
+  --color-primary-content: #ffffff;
+  --radius-box: 10px;          /* matches the existing .card radius */
+  --radius-field: 6px;
+}
 
 /* Self-hosted. Never a webfont CDN: it would put a third-party request on
    every page load and leak the referrer, the same argument as 4.3.3's rule
