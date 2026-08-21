@@ -25,6 +25,34 @@ logger = logging.getLogger(__name__)
 _USABLE = ("ok", "needs_review")
 
 
+# Keys the SOURCE owns outright. Enrichment may never write these, whatever it
+# says, because they are not judgements about the text -- they are facts about
+# where the listing sits in the source's own catalogue, which no reading of the
+# text can establish.
+#
+# category_path is the case that proved it. Of 250 records where the model
+# filled it, 250 differed from the adapter and not one matched: it invents a
+# taxonomy of its own ('Electronics/Audio Equipment', 'Education/Online
+# Learning', 'Websites'). That is not merely untidy. in_scope() requires
+# path[0] to be 'For Sale' or 'Services', so an invented root drops the document
+# out of entity resolution altogether, and _mapped_key() and _is_service() read
+# the same field.
+#
+# Filtering only EMPTY answers was not enough: a wrong answer is worse than a
+# blank one, and this field cannot have a right one.
+_ADAPTER_OWNED = frozenset({"category_path", "specs_raw"})
+
+
+def _unanswered(value) -> bool:
+    """True when the model left the field alone.
+
+    Deliberately not `not value`: `negotiable: False` and a numeric 0 are
+    answers, and treating them as absent would silently drop the only two
+    values a boolean facet can take.
+    """
+    return value is None or value == "" or value == [] or value == {}
+
+
 def apply_enrichment(draft: DocumentDraft) -> DocumentDraft:
     record = (
         EnrichedRecord.objects
@@ -58,7 +86,20 @@ def apply_enrichment(draft: DocumentDraft) -> DocumentDraft:
                        draft.source, draft.source_key)
         return draft
 
-    draft.attrs = {**draft.attrs, **attrs_model.model_dump()}
+    # Only the keys the model actually FILLED. model_dump() returns every field
+    # in the schema including untouched defaults, so merging it wholesale let a
+    # default overwrite real adapter data -- `category_path: []` blanked iBay's
+    # own breadcrumb on 7,553 documents, which took in_scope(), _mapped_key()
+    # and _is_service() out at once and halved entity resolution: 22,869 links
+    # down to 11,098, missed from 33.4% to 67.7%.
+    #
+    # This is rule 3 of the prompt applied on our side rather than trusted to
+    # the model: scraped fields win, the model may fill a blank and never
+    # overwrite one. False and 0 are real answers and must survive -- only
+    # None, "", [] and {} count as "did not answer".
+    enriched = {k: v for k, v in attrs_model.model_dump().items()
+                if k not in _ADAPTER_OWNED and not _unanswered(v)}
+    draft.attrs = {**draft.attrs, **enriched}
 
     # The only figure comparable across ads that itemize differently, so it is
     # what the salary facet and the salary sort read. Spec 4.3.2, 7.

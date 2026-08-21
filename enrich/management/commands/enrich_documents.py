@@ -92,4 +92,13 @@ class Command(BaseCommand):
 
         # Deliberately does NOT clear stale_marked_at: reindex is the last
         # stage and the only one that clears the work ticket (spec 5.7).
-        self.stdout.write("Done. Run `manage.py reindex --stale` to publish.")
+        #
+        # And deliberately does not SET it either, which is why the advice here
+        # is a full reindex rather than `--stale`. stale_marked_at is the sync's
+        # ticket for source text that CHANGED; enrichment adds a layer over text
+        # that did not. This line used to say `reindex --stale`, which would have
+        # published nothing at all: 20,494 enriched records sat unpublished
+        # behind a flag that was 0 on every document.
+        self.stdout.write(
+            "Done. Run `manage.py reindex --source <source>` to publish "
+            "(NOT --stale: enrichment does not set stale_marked_at).")

@@ -21,6 +21,12 @@ from django.conf import settings
 from django.db import transaction
 
 from search.models import DocumentSpec, SearchDocument, SpecKey
+
+# Read off the model rather than repeated here, so a migration cannot leave
+# these truncations silently wrong.
+_UNIT_MAX = DocumentSpec._meta.get_field("unit").max_length
+_VALUE_TEXT_MAX = DocumentSpec._meta.get_field("value_text").max_length
+_KEY_RAW_MAX = DocumentSpec._meta.get_field("key_raw").max_length
 from search.specs.extract import extract_units
 from search.specs.normalize import normalize_value
 
@@ -56,11 +62,31 @@ def specs_for_document(doc: SearchDocument, registry=None) -> list[dict]:
             return
         seen.add(ident)
         spec_key = registry.get(key_raw)
+        # A unit is short by nature: GB, mm, W, MVR, mAh. Anything that does not
+        # fit DocumentSpec.unit is not a unit -- it is a VALUE the model filed in
+        # the wrong slot. Measured over the enriched shopping corpus: 31 of 494
+        # distinct units overflowed, and they read 'Action and Adventure',
+        # 'H.265+/H.265/H.264+/H.264', 'Capture & reduction of growth'.
+        #
+        # So the fix is to drop it, not to widen the column. Widening would let
+        # a sentence become a facet value and pollute the vocabulary the whole
+        # facet system keys on. It is the opposite call from
+        # Iulaan.translated_title, which was widened because the content there
+        # was legitimate and the column was simply too small for it -- same
+        # symptom, and the data decides which one it is.
+        #
+        # Dropping only the unit keeps the spec: the key and value are usually
+        # right even when the unit is nonsense. Before this the DataError killed
+        # the whole pass, so 20,494 enriched records projected 192 rows.
+        if unit and len(unit) > _UNIT_MAX:
+            if not value_text:
+                value_text = unit[:_VALUE_TEXT_MAX]
+            unit = ""
         rows.append({
             "key_id": spec_key.id if spec_key else None,
-            "key_raw": key_raw,
+            "key_raw": key_raw[:_KEY_RAW_MAX],
             "value_num": value_num,
-            "value_text": value_text,
+            "value_text": value_text[:_VALUE_TEXT_MAX],
             "unit": unit,
             "provenance": provenance,
         })
