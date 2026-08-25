@@ -55,7 +55,7 @@ def test_table_is_partitioned_by_source():
 
 
 @pytest.mark.django_db
-def test_partitions_exist_for_both_sources():
+def test_partitions_exist_for_gazette_and_a_default():
     with connection.cursor() as cur:
         cur.execute("""
             SELECT c.relname FROM pg_inherits i
@@ -65,5 +65,4 @@ def test_partitions_exist_for_both_sources():
         """)
         names = [r[0] for r in cur.fetchall()]
     assert "search_searchdocument_gazette" in names
-    assert "search_searchdocument_ibay" in names
     assert "search_searchdocument_default" in names

@@ -45,60 +45,18 @@ def test_a_full_prefix_of_new_material_never_stops():
     assert seen_streak({1: False, 2: False, 3: False}) == 0
 
 
-@pytest.mark.parametrize("module,cap_attr", [
-    ("gazette.sync_service", "MAX_INDEX_PAGES"),
-    ("ibay.sync_service", "MAX_PAGES_PER_CATEGORY"),
-])
-def test_both_syncs_stop_after_seen_pages_by_default(module, cap_attr):
+def test_gazette_sync_stops_after_seen_pages_by_default():
     """The default must be on. A guard that needs an env var set is the same
     mistake as the DEBUG-keyed cap it replaces."""
-    import importlib
-    m = importlib.import_module(module)
+    from gazette import sync_service as m
     assert m.STOP_AFTER_SEEN_PAGES >= 1
-    assert hasattr(m, cap_attr)
+    assert hasattr(m, "MAX_INDEX_PAGES")
 
 
-@pytest.mark.parametrize("command", ["sync_gazette", "sync_ibay"])
-def test_full_flag_exists_to_override(command):
+def test_full_flag_exists_to_override():
     """A backfill has to remain possible, explicitly."""
     from django.core.management import load_command_class
-    parser = load_command_class("gazette" if "gazette" in command else "ibay",
-                                command).create_parser("manage.py", command)
+    parser = load_command_class("gazette", "sync_gazette").create_parser(
+        "manage.py", "sync_gazette")
     flags = {a.dest for a in parser._actions}
     assert {"full", "max_pages", "stop_after_seen"} <= flags
-
-
-# --------------------------------------------------------------------------
-# The detail phases. Only one path re-fetches something already stored, and it
-# has to stay bounded.
-# --------------------------------------------------------------------------
-
-def test_the_detail_batch_only_takes_unscraped_products():
-    """sync_product_details must never re-fetch a product whose details exist.
-    Measured when this was checked: 14,260 SCRAPED, 14,230 NOT_SCRAPED, and only
-    the latter are eligible."""
-    import inspect
-    from ibay import sync_service
-
-    src = inspect.getsource(sync_service.sync_product_details)
-    assert 'status="NOT_SCRAPED"' in src
-
-
-def test_the_stale_refresh_is_bounded_per_cycle():
-    """It is the only deliberate re-scrape. At STALE_DAYS=1 with a 10-minute
-    loop it re-fetched the whole SCRAPED corpus daily, unbounded per cycle."""
-    from ibay import sync_service
-
-    assert sync_service.STALE_DAYS >= 7
-    assert sync_service.STALE_BATCH_LIMIT >= 1
-
-
-def test_dead_listings_are_not_retried_forever():
-    """5,404 of 5,427 ERROR rows are 'Listing disabled or not found'. Those are
-    gone from the site, and the detail batch's NOT_SCRAPED filter is what keeps
-    the crawler from asking about them again every cycle."""
-    import inspect
-    from ibay import sync_service
-
-    src = inspect.getsource(sync_service.fetch_product_detail)
-    assert "Listing disabled" in src or "Listing not found" in src

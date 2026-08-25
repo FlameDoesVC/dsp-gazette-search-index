@@ -91,16 +91,15 @@ def test_remembering_twice_updates_rather_than_duplicating():
 
 
 @pytest.mark.django_db
-def test_the_overlay_runs_before_enrichment_and_the_catalog():
+def test_the_overlay_runs_before_enrichment():
     """Order is the whole safety argument: a machine translation is the weakest
     claim in the stack and has to lose to a model extraction from the document
-    itself, or to a profile built from every listing of the thing."""
+    itself."""
     from django.conf import settings
 
     overlays = settings.SEARCH_DRAFT_OVERLAYS
     assert overlays[0] == "search.translations.apply_translations"
     assert "enrich.overlay.apply_enrichment" in overlays[1:]
-    assert "catalog.overlay.apply_entity" in overlays[1:]
 
 
 @pytest.mark.django_db
