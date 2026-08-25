@@ -17,12 +17,7 @@ RUN apt-get update \
 COPY requirements.txt ./
 
 RUN pip install -r requirements.txt \
-    && pip install \
-        django-ninja \
-        gunicorn \
-        uvicorn \
-        anthropic \
-        python-docx
+    && pip install gunicorn uvicorn
 
 EXPOSE 8000
 
