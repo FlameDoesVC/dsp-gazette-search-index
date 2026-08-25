@@ -23,16 +23,3 @@ def report_quota_exceeded(ip_hash: str) -> bool:
         reporter_ip_hash=ip_hash, created_at__gte=window
     ).count()
     return used >= settings.REPORT_RATE_LIMIT
-
-
-def proposal_quota_exceeded(ip_hash: str) -> bool:
-    """Counted over the proposals table, like reports: three gunicorn workers
-    make an in-process limiter grant three times the budget, and Redis for one
-    counter is not worth a service."""
-    from catalog.models import FieldProposal
-
-    window = timezone.now() - dt.timedelta(
-        seconds=settings.CATALOG_PROPOSAL_RATE_WINDOW)
-    used = FieldProposal.objects.filter(
-        proposer_ip_hash=ip_hash, created_at__gte=window).count()
-    return used >= settings.CATALOG_PROPOSAL_RATE_LIMIT
