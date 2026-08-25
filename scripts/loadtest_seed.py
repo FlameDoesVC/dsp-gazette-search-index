@@ -43,7 +43,7 @@ def main(total: int, batch_size: int = 1000) -> None:
         n = min(batch_size, total - written)
         upsert_drafts([
             DocumentDraft(
-                source="ibay",
+                source="gazette",
                 source_key=f"synthetic-{written + i}",
                 doc_type=rng.choice(TYPES),
                 url=f"https://example.mv/{written + i}",

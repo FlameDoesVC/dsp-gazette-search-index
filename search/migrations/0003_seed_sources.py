@@ -2,15 +2,6 @@ from django.db import migrations
 
 SOURCES = [
     dict(
-        key="ibay",
-        label_en="iBay",
-        label_dv="އައިބޭ",
-        site_url="https://ibay.com.mv",
-        icon="/static/sources/ibay.svg",
-        icon_fallback_text="iB",
-        accent="#1f6feb",
-    ),
-    dict(
         key="gazette",
         label_en="Gazette",
         label_dv="ގެޒެޓް",

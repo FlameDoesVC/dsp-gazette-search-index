@@ -39,8 +39,6 @@ CREATE TABLE search_searchdocument (
     CONSTRAINT uniq_source_source_key UNIQUE (source, source_key)
 ) PARTITION BY LIST (source);
 
-CREATE TABLE search_searchdocument_ibay
-    PARTITION OF search_searchdocument FOR VALUES IN ('ibay');
 CREATE TABLE search_searchdocument_gazette
     PARTITION OF search_searchdocument FOR VALUES IN ('gazette');
 CREATE TABLE search_searchdocument_default

@@ -55,10 +55,8 @@ INSTALLED_APPS = [
     'treebeard',
     'core',
     'gazette',
-    'ibay',
     'search',
     'enrich',
-    'catalog',
     'api',
 ]
 
@@ -191,7 +189,6 @@ LOGGING = {
     },
     'loggers': {
         'gazette': {'handlers': ['console'], 'level': 'INFO'},
-        'ibay': {'handlers': ['console'], 'level': 'INFO'},
     },
 }
 
@@ -355,24 +352,4 @@ SEARCH_DRAFT_OVERLAYS = [
     # of the thing. It only fills empty fields, never replaces one.
     "search.translations.apply_translations",
     "enrich.overlay.apply_enrichment",
-    # After enrichment: an entity profile is built from every listing of the
-    # thing and must win over a single listing's extraction.
-    "catalog.overlay.apply_entity",
 ]
-# --- catalog identity (see catalog/identity.py::identity_stopwords) ---
-# A model token appearing in this many For Sale listings or more names a
-# platform, a capacity or a marketing claim, not a product. Measured DF:
-# PS5 426, PS4 266, 5G 214, 256GB 163 against WH-1000XM5 2 and SQ905 1.
-CATALOG_IDENTITY_STOPWORD_DF = int(os.getenv("CATALOG_IDENTITY_STOPWORD_DF", "15"))
-
-# --- catalog (entity layer, spec section 19) ---
-# How many linked listings feed one profile call. The union is what makes
-# consensus possible; past a few dozen it is repetition paid for by the token.
-CATALOG_PROFILE_MAX_LISTINGS = int(os.getenv("CATALOG_PROFILE_MAX_LISTINGS", "12"))
-CATALOG_CONSENSUS_MIN_SELLERS = int(os.getenv("CATALOG_CONSENSUS_MIN_SELLERS", "2"))
-CATALOG_INFERRED_MIN_CONFIDENCE = float(
-    os.getenv("CATALOG_INFERRED_MIN_CONFIDENCE", "0.7"))
-CATALOG_PROPOSAL_QUORUM = int(os.getenv("CATALOG_PROPOSAL_QUORUM", "3"))
-CATALOG_PROPOSAL_MARGIN = int(os.getenv("CATALOG_PROPOSAL_MARGIN", "2"))
-CATALOG_PROPOSAL_RATE_LIMIT = int(os.getenv("CATALOG_PROPOSAL_RATE_LIMIT", "20"))
-CATALOG_PROPOSAL_RATE_WINDOW = int(os.getenv("CATALOG_PROPOSAL_RATE_WINDOW", "3600"))
