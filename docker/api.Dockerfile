@@ -31,6 +31,6 @@ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 FROM base AS prod
 COPY . .
-CMD ["gunicorn", "beynunehcheh.asgi:application", \
+CMD ["gunicorn", "gazette_search.asgi:application", \
      "--worker-class=uvicorn.workers.UvicornWorker", \
      "--workers=3", "--bind=0.0.0.0:8000"]

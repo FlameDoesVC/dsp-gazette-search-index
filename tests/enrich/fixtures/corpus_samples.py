@@ -5,7 +5,7 @@ survive, and several of them (the '/-' suffix, the seven-digit number embedded
 in a spec title) are the reason a rule exists.
 """
 
-# --- iBay titles that carry their whole spec sheet ---
+# --- titles from a prior marketplace source that carry their whole spec sheet ---
 POWER_SUPPLY_TITLE = "KICO METAL POWER SUPPLY 24V-5A-120W / 7884445"
 ROOM_TITLE = "1 Room Apartment for rent Viber Only 9223232 7000/- Near IGMH"
 BEDSPACE_TITLE = (
@@ -29,7 +29,7 @@ GAZETTE_JOB_BODY = """\
 NEGOTIABLE_BODY = "Salary negotiable depending on experience. Call 7994400."
 NO_SALARY_BODY = "Looking for a cashier. Call 9483252 for details."
 
-# --- iBay ProductInfo values that arrive as strings, not numbers ---
+# --- marketplace ProductInfo values that arrive as strings, not numbers ---
 INFO_BEDROOMS = {"Bedrooms": "3 Rooms", "Bathrooms": "2", "Ideal Tenants": "Family"}
 INFO_BEDROOMS_PLUS = {"Bedrooms": "4 Rooms and More"}
 INFO_FACILITIES = {"Room Facilities": "Air Conditioning, Fans, Towels"}

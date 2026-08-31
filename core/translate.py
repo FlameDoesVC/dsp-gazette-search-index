@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import logging
 import re
-import threading
 
 import httpx
 from django.conf import settings
@@ -33,9 +32,14 @@ BATCH_SIZE = 8
 _NUMBERED = re.compile(r"^\s*(\d+)[.)]\s*(.*)$")
 
 _BATCH_PROMPT = (
-    "Translate each numbered {src} line to {dst}. Output exactly one numbered "
-    "line per input, using the same numbering, and nothing else. Do not merge, "
-    "split, reorder or omit lines.\n\n"
+    "Translate each numbered {src} line to {dst}. These are phrases from "
+    "Maldivian government job postings (allowance names, application "
+    "instructions, required-document descriptions). Translate literally and "
+    "precisely: preserve the exact meaning of every clause, do not "
+    "paraphrase, do not summarise, and do not invent official-sounding "
+    "wording that is not present in the source. Output exactly one numbered "
+    "line per input, using the same numbering, and nothing else. Do not "
+    "merge, split, reorder or omit lines.\n\n"
 )
 
 
@@ -86,8 +90,6 @@ SEMAPHORE = asyncio.Semaphore(2)
 CLOUD_SEMAPHORE = asyncio.Semaphore(1)
 
 _client = None
-_local_llm = None
-_load_lock = threading.Lock()
 
 
 def _get_client():
@@ -130,70 +132,6 @@ async def _cache_translation_async(text, translation):
     from asgiref.sync import sync_to_async
 
     await sync_to_async(_cache_translation)(text, translation)
-
-
-async def _load_local_llm_async():
-    return await asyncio.to_thread(_load_local_llm)
-
-
-def _load_local_llm():
-    global _local_llm
-    with _load_lock:
-        if _local_llm is not None:
-            return _local_llm
-
-        from llama_cpp import Llama
-
-        repo_id = "mradermacher/GemmaTranslate-v3-12B-GGUF"
-        filename = "GemmaTranslate-v3-12B.IQ4_XS.gguf"
-
-        logger.info("Downloading GemmaTranslate model (~7GB, one-time)...")
-        print("\n--- Downloading translation model (~7GB, one-time) ---")
-
-        try:
-            from huggingface_hub import hf_hub_download
-            path = hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                resume_download=True,
-            )
-            print(f"Model downloaded to: {path}")
-            _local_llm = Llama(
-                model_path=path,
-                n_ctx=4096,
-                verbose=False,
-            )
-        except ImportError:
-            _local_llm = Llama.from_pretrained(
-                repo_id=repo_id,
-                filename=filename,
-                n_ctx=4096,
-                verbose=True,
-            )
-
-        logger.info("Local model ready.")
-        print("--- Model ready, translations starting ---\n")
-        return _local_llm
-
-
-def _get_local_llm():
-    if _local_llm is not None:
-        return _local_llm
-    return _load_local_llm()
-
-
-async def _translate_local(text, prompt):
-    llm = await _load_local_llm_async()
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None,
-        lambda: llm.create_chat_completion(
-            messages=[{"role": "user", "content": f"{prompt}\n\n{text}"}],
-            temperature=0,
-            max_tokens=1024,
-        ),
-    )
-    return result["choices"][0]["message"]["content"].strip()
 
 
 async def _translate_ollama(text, prompt):
@@ -315,15 +253,9 @@ async def _translate_uncached(text, prompt):
     async with SEMAPHORE:
         if settings.OLLAMA_URL:
             result = await _translate_ollama(text, prompt)
-        else:
-            try:
-                result = await _translate_local(text, prompt)
-            except Exception:
-                logger.debug("Local model unavailable, trying remote")
-                result = None
 
     if result is not None and not _is_clean_translation(result):
-        logger.warning("Local translation had unexpected script, discarding: %s", result[:80])
+        logger.warning("Ollama translation had unexpected script, discarding: %s", result[:80])
         result = None
 
     if result is None:
@@ -395,12 +327,14 @@ def translate_auto_sync(text):
 
 
 def _translate_batch_chunk(chunk: list[str], prompt: str, src: str, dst: str,
-                           batch_size: int) -> list[str]:
+                           batch_size: int, model: str | None = None) -> list[str]:
     """Translate one chunk (<= batch_size) in a single numbered call.
 
     Cache per item, never per batch -- batches never repeat, individual
-    strings do (40% of iBay titles are duplicates). On a misaligned reply,
-    fall back to one call per uncached item rather than trusting position.
+    strings do (40% of titles from a prior marketplace source were
+    duplicates). On a misaligned reply, or a line whose script does not
+    check out, fall back to one call per uncached item rather than trusting
+    position or a provider's own claim.
     """
     results: list[str] = [_cached_translation(t) or "" for t in chunk]
     missing_idx = [i for i, r in enumerate(results) if not r]
@@ -408,28 +342,44 @@ def _translate_batch_chunk(chunk: list[str], prompt: str, src: str, dst: str,
         return results
 
     numbered = "\n".join(f"{i + 1}. {chunk[i]}" for i in missing_idx)
-    reply = _chat(_BATCH_PROMPT.format(src=src, dst=dst) + numbered)
+    reply = _chat(_BATCH_PROMPT.format(src=src, dst=dst) + numbered, model=model)
+    unresolved = list(missing_idx)
     if reply:
         parsed = _parse_numbered(reply, len(missing_idx))
         if parsed is not None:
+            unresolved = []
             for k, idx in enumerate(missing_idx):
-                results[idx] = parsed[k]
-                _cache_translation(chunk[idx], parsed[k])
-            return results
+                candidate = parsed[k]
+                if _is_clean_translation(candidate):
+                    results[idx] = candidate
+                    _cache_translation(chunk[idx], candidate)
+                else:
+                    logger.warning(
+                        "Batch translation had unexpected script, discarding: %s",
+                        candidate[:80])
+                    unresolved.append(idx)
 
-    # Misaligned or empty reply: pay for accuracy, one call per miss.
-    for idx in missing_idx:
+    # Misaligned reply, empty reply, or a line that failed the script check:
+    # pay for accuracy, one call per miss. Falls back to the general ladder
+    # (no model override) -- a dedicated model that hallucinated once on this
+    # string is not worth chasing twice, and `_translate_sync` already
+    # validates script itself before caching.
+    for idx in unresolved:
         results[idx] = _translate_sync(chunk[idx], prompt) or chunk[idx].strip()
     return results
 
 
 def translate_batch_sync(texts: list[str], *, target: str,
-                         batch_size: int = BATCH_SIZE) -> list[str]:
+                         batch_size: int = BATCH_SIZE,
+                         model: str | None = None) -> list[str]:
     """Translate a list of short strings, one numbered call per batch.
 
     Measured 7.7x faster than one call per title, and more accurate: numbered
     context disambiguates ("ނީލަން ކިޔުން" -> "Public auction" in a batch, but
     "Niland Reading" alone). Never fewer results than inputs.
+
+    `model` overrides the Ollama model for this batch (e.g. a dedicated
+    translation model rather than the general chat model).
     """
     if not texts:
         return []
@@ -440,8 +390,24 @@ def translate_batch_sync(texts: list[str], *, target: str,
     out: list[str] = []
     for start in range(0, len(texts), batch_size):
         out.extend(_translate_batch_chunk(
-            texts[start:start + batch_size], prompt, src, dst, batch_size))
+            texts[start:start + batch_size], prompt, src, dst, batch_size,
+            model=model))
     return out
+
+
+def cached_translations(texts: list[str]) -> dict[str, str]:
+    """Batched cache lookup: every text that already has a cached translation,
+    in one query. Never calls a provider -- used at request time, where an
+    LLM round trip is not an option.
+    """
+    from core.models import TranslationCache
+
+    wanted = {t: _hash(t) for t in texts if t}
+    if not wanted:
+        return {}
+    by_hash = {v: k for k, v in wanted.items()}
+    rows = TranslationCache.objects.filter(source_hash__in=wanted.values())
+    return {by_hash[r.source_hash]: r.translated_text for r in rows}
 
 
 async def translate_batch(texts: list[str], *, target: str,
@@ -452,12 +418,12 @@ async def translate_batch(texts: list[str], *, target: str,
                                                      batch_size=batch_size)
 
 
-def _translate_ollama_sync(content):
+def _translate_ollama_sync(content, model=None):
     try:
         response = httpx.post(
             f"{settings.OLLAMA_URL}/api/chat",
             json={
-                "model": settings.OLLAMA_MODEL,
+                "model": model or settings.OLLAMA_MODEL,
                 "messages": [{"role": "user", "content": content}],
                 "stream": False,
                 "options": {"temperature": 0, "seed": 42},
@@ -532,29 +498,19 @@ def _translate_gemini_sync(content):
     return None
 
 
-def _local_chat(content):
-    try:
-        llm = _get_local_llm()
-        result = llm.create_chat_completion(
-            messages=[{"role": "user", "content": content}],
-            temperature=0,
-            max_tokens=1024,
-        )
-        return result["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return None
-
-
-def _chat(full_prompt: str, **kw) -> str | None:
+def _chat(full_prompt: str, *, model: str | None = None) -> str | None:
     """One raw provider round trip for a complete prompt, via the escalation
-    ladder: ollama (or local llm) -> openrouter -> gemini.
+    ladder: ollama -> openrouter -> gemini.
+
+    `model` overrides the Ollama model for this call only (e.g. a dedicated
+    translation model rather than the general chat model); the cloud fallback
+    steps always use their own fixed model regardless.
 
     No clean-check and no cache here -- callers decide those. Used by both the
     per-item `_translate_sync` and the numbered `translate_batch_sync`, so the
     ladder exists once.
     """
-    result = _translate_ollama_sync(full_prompt) if settings.OLLAMA_URL \
-        else _local_chat(full_prompt)
+    result = _translate_ollama_sync(full_prompt, model=model) if settings.OLLAMA_URL else None
     if result is None and settings.OPENROUTER_API_KEY:
         result = _translate_openrouter_sync(full_prompt)
     if result is None and settings.GEMINI_API_KEY:

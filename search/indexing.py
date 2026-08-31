@@ -64,8 +64,9 @@ def _row(draft: DocumentDraft) -> SearchDocument:
     summary_en, summary_dv = route_bilingual(draft.summary_en, draft.summary_dv)
     # The leaf category drives ranking and faceting (P9 task 4).
     # The canonical taxonomy decides the bucket, not the source's own path.
-    # Measured: 9 iBay leaf labels are ambiguous across families, and both P9's
-    # category-aware ranking and spec 8.3's facet override key on category_leaf.
+    # Measured: 9 leaf labels from a prior source were ambiguous across
+    # families, and both P9's category-aware ranking and spec 8.3's facet
+    # override key on category_leaf.
     from search.taxonomy import map_path
     path = draft.attrs.get("category_path") or []
     category = map_path(draft.source, [str(p) for p in path])

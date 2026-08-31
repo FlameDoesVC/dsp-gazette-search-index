@@ -58,9 +58,9 @@ def test_seeding_does_not_overwrite_a_curated_row():
 
 @pytest.mark.django_db
 def test_candidate_keys_ranks_unpromoted_keys_by_frequency():
-    doc = SearchDocument.objects.create(source="ibay", source_key="1",
+    doc = SearchDocument.objects.create(source="other", source_key="1",
                                         doc_type="shopping", url="https://x")
-    doc2 = SearchDocument.objects.create(source="ibay", source_key="2",
+    doc2 = SearchDocument.objects.create(source="other", source_key="2",
                                          doc_type="shopping", url="https://x")
     for d in (doc, doc2):
         DocumentSpec.objects.create(document_id=d.id, key_raw="warranty",

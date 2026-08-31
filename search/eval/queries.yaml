@@ -23,36 +23,36 @@ documents:
   - {source: gazette, source_key: g-collide-1, doc_type: news,
      url: "https://gazette.gov.mv/iulaan/5",
      title_dv: "ހިކަތި", text_dv: "ހިކަތި"}
-  - {source: ibay, source_key: i-phone-1, doc_type: shopping,
-     url: "https://ibay.com.mv/1", title_en: "Apple iPhone 13 Pro 256GB",
+  - {source: other, source_key: i-phone-1, doc_type: shopping,
+     url: "https://other-source.example/1", title_en: "Apple iPhone 13 Pro 256GB",
      text_en: "apple iphone 13 pro 256gb unlocked",
      attrs: {category_path: ["Electronics", "Mobile Phones"]}}
   # The P9 task 4 regression: accessories are perfect lexical matches for
   # "iphone" and outrank the phone on ts_rank_cd alone. Category diversity in
   # the result page must still surface the phone.
-  - {source: ibay, source_key: i-acc-case-1, doc_type: shopping,
-     url: "https://ibay.com.mv/6",
+  - {source: other, source_key: i-acc-case-1, doc_type: shopping,
+     url: "https://other-source.example/6",
      title_en: "iPhone 15 Pro Max case cover",
      text_en: "iphone 15 pro max case cover silicone",
      attrs: {category_path: ["Electronics", "Cases, Protection & Skins"]}}
-  - {source: ibay, source_key: i-acc-charger-1, doc_type: shopping,
-     url: "https://ibay.com.mv/7",
+  - {source: other, source_key: i-acc-charger-1, doc_type: shopping,
+     url: "https://other-source.example/7",
      title_en: "iPhone fast charging cable charger",
      text_en: "iphone fast charging cable charger type c",
      attrs: {category_path: ["Electronics", "Charger"]}}
-  - {source: ibay, source_key: i-wash-1, doc_type: shopping,
-     url: "https://ibay.com.mv/2", title_en: "Front load washing machine",
+  - {source: other, source_key: i-wash-1, doc_type: shopping,
+     url: "https://other-source.example/2", title_en: "Front load washing machine",
      text_en: "front load washing machine halaalukuvefa hunna"}
-  - {source: ibay, source_key: i-bed-1, doc_type: property,
-     url: "https://ibay.com.mv/3",
+  - {source: other, source_key: i-bed-1, doc_type: property,
+     url: "https://other-source.example/3",
      title_en: "Sharing Bed Space Available",
      text_en: "sharing bed space firihen kudhin bahattaden hulhumale phase 2"}
-  - {source: ibay, source_key: i-psu-1, doc_type: shopping,
-     url: "https://ibay.com.mv/4",
+  - {source: other, source_key: i-psu-1, doc_type: shopping,
+     url: "https://other-source.example/4",
      title_en: "KICO METAL POWER SUPPLY 24V-5A-120W",
      text_en: "kico metal power supply 24v 5a 120w"}
-  - {source: ibay, source_key: i-clean-1, doc_type: job,
-     url: "https://ibay.com.mv/5",
+  - {source: other, source_key: i-clean-1, doc_type: job,
+     url: "https://other-source.example/5",
      title_en: "Cleaning work daily worker",
      text_en: "cleaning jobs household office hotels daily wage"}
 

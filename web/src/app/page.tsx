@@ -10,7 +10,7 @@ export default function Home() {
   return (
     <main className="mx-auto grid min-h-[70vh] max-w-xl place-items-center px-4">
       <div className="w-full">
-        <h1 className="mb-6 text-center text-3xl font-semibold">Beynunehcheh</h1>
+        <h1 className="mb-6 text-center text-3xl font-semibold">Gazette Search</h1>
         {/* A plain server-action form, so the home page works with JS off. */}
         <form action={go} role="search">
           <input

@@ -31,4 +31,14 @@ describe("ShoppingCard", () => {
     const { container } = render(<ShoppingCard result={shoppingResult} />);
     expect(container.querySelector("img")).toHaveAttribute("loading", "lazy");
   });
+
+  it("offers no Details toggle when there is nothing behind it", () => {
+    const bare = {
+      ...shoppingResult,
+      card: { source: "other", title: shoppingResult.title,
+              price_display: "MVR 850" },
+    } as never;
+    render(<ShoppingCard result={bare} />);
+    expect(screen.queryByRole("button", { name: /details/i })).toBeNull();
+  });
 });

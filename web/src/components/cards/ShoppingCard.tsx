@@ -1,21 +1,26 @@
 "use client";
 
 import { Bidi } from "@/components/Bidi";
-import { Disclosure } from "@/components/Disclosure";
 import { SpecTable } from "@/components/detail/SpecTable";
 import type { ResultOut } from "@/lib/api";
+import { isDhivehi } from "@/lib/script";
 import { CardShell } from "./CardShell";
 import { ProfileNote, SimilarCount } from "./EntityMeta";
 
 export function ShoppingCard({ result }: { result: ResultOut }) {
   const c = result.card as Record<string, never>;
   const hero = c.hero_image as string | null;
+  const dv = isDhivehi((c.title as string) || result.title);
+  const specs = ((c.specs as never) ?? []) as {
+    key_raw: string; value_num?: number | null; value_text?: string; unit?: string;
+  }[];
+  const hasDetails = specs.length > 0 || !!c.seller_name;
 
   return (
     <CardShell
       result={result}
       title={(c.title as string) || result.title}
-      summary={result.summary || undefined}
+      summary={hasDetails ? undefined : (result.summary || undefined)}
       thumbnail={hero}
       highlight={
         <>
@@ -37,20 +42,24 @@ export function ShoppingCard({ result }: { result: ResultOut }) {
       ) : null}
       <div className="mt-1 flex items-center gap-1.5 text-xs text-base-content/60">
         {c.condition ? (
-          <span className="badge badge-sm">{c.condition as string}</span>
+          <Bidi
+            as="span"
+            className="badge badge-sm"
+            text={dv ? (c.condition_label_dv as string) : (c.condition_label_en as string)}
+          />
         ) : null}
         {c.seller_is_premium ? (
           <span data-testid="premium" title="Premium seller">★</span>
         ) : null}
       </div>
-      <Disclosure label="Details">
-        <SpecTable specs={((c.specs as never) ?? []) as {
-          key_raw: string; value_num?: number | null; value_text?: string; unit?: string;
-        }[]} />
-        {c.seller_name && (
-          <p className="mt-1 text-sm text-base-content/60">Seller: {c.seller_name as string}</p>
-        )}
-      </Disclosure>
+      {hasDetails && (
+        <div className="mt-2">
+          <SpecTable specs={specs} headingLevel="h3" />
+          {c.seller_name && (
+            <p className="mt-1 text-sm text-base-content/60">Seller: {c.seller_name as string}</p>
+          )}
+        </div>
+      )}
       <SimilarCount count={c.listing_count as number | undefined} />
       <ProfileNote
         tier={c.profile_tier as string | undefined}

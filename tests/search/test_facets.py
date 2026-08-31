@@ -12,17 +12,17 @@ def test_every_doc_type_has_a_facet_set():
     [
         # Spec 8.1
         ("job", {"job_category", "position_type", "salary_state", "employer",
-                 "grade", "location", "source", "net_estimate"}),
+                 "grade", "location", "net_estimate"}),
         # Spec 8.2
         ("property", {"listing_kind", "price", "unit_kind", "is_shared",
                       "bedrooms", "bathrooms", "furnishing", "neighborhood",
                       "island", "atoll", "has_lift", "square_feet",
-                      "tenant_preference", "source"}),
+                      "tenant_preference"}),
         # Spec 8.3 universal half; the dynamic half is P7
         ("shopping", {"price", "condition", "brand", "location", "seller_type",
-                      "has_images", "source"}),
+                      "has_images"}),
         # Spec 8.4
-        ("news", {"source", "office", "announcement_type", "has_attachments",
+        ("news", {"office", "announcement_type", "has_attachments",
                   "is_tender"}),
     ],
 )
@@ -43,13 +43,6 @@ def test_every_facet_declares_where_its_value_lives():
         for f in defs:
             assert f.storage in {"column", "attrs", "attrs_array"}, f.key
             assert f.path, f.key
-
-
-def test_source_is_a_facet_on_every_type():
-    """Spec 8.5: the source facet is part of the consistent attribution
-    system, not a per-type extra."""
-    for doc_type in ("job", "property", "shopping", "news"):
-        assert facet_def(doc_type, "source") is not None
 
 
 def test_rent_ranges_are_declared_per_period_and_currency():

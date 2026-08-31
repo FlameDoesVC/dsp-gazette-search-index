@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { newsResult } from "@/test/fixtures";
+import { dhivehiNewsResult, newsResult } from "@/test/fixtures";
 import { NewsCard } from "./NewsCard";
 
 describe("NewsCard", () => {
@@ -31,8 +31,23 @@ describe("NewsCard", () => {
     expect(screen.getByText(/2 documents/i)).toBeInTheDocument();
   });
 
-  it("gives the Thaana announcement type its own dir", () => {
+  it("shows the announcement type label in English for an English-titled item", () => {
     render(<NewsCard result={newsResult} />);
+    expect(screen.getByText("Tender")).toBeInTheDocument();
+  });
+
+  it("gives the Thaana announcement type label its own dir for a Dhivehi-titled item", () => {
+    render(<NewsCard result={dhivehiNewsResult} />);
     expect(screen.getByText("ބީލަން")).toHaveAttribute("dir", "rtl");
+  });
+
+  it("shows no translated flag when nothing fell back", () => {
+    render(<NewsCard result={newsResult} />);
+    expect(screen.queryByText("Translated")).toBeNull();
+  });
+
+  it("flags a result shown in the other language", () => {
+    render(<NewsCard result={{ ...newsResult, translated: true }} />);
+    expect(screen.getByText("Translated")).toBeInTheDocument();
   });
 });

@@ -46,27 +46,9 @@ IULAAN_TYPE_MAP = {
     "މުބާރާތް": "news",                  # competitions
 }
 
-IBAY_CATEGORY_MAP = {
-    "Jobs": "job",
-    "Housing & Real Estate": "property",
-    "Announcements & Events": "news",
-    "For Sale": "shopping",
-    "Services": "shopping",
-    "Wanted": "shopping",
-    "Free Stuff": "shopping",
-    "Business Opportunities": "shopping",
-}
-
-
-def prior_for(source: str, *, iulaan_type: str = "", categories=()) -> str:
+def prior_for(source: str, *, iulaan_type: str = "") -> str:
     if source == "gazette":
         return IULAAN_TYPE_MAP.get((iulaan_type or "").strip(), DEFAULT_DOC_TYPE)
-    if source == "ibay":
-        for name in categories:
-            hit = IBAY_CATEGORY_MAP.get((name or "").strip())
-            if hit:
-                return hit
-        return DEFAULT_DOC_TYPE
     return DEFAULT_DOC_TYPE
 
 
@@ -75,10 +57,10 @@ def apply_confidence_gate(
 ) -> tuple[str, bool]:
     """Returns (chosen_type, was_overridden).
 
-    The gate exists because the data is genuinely mixed: iBay listings like
-    'Cleaning work daily worker' sit under shopping-ish categories and are
-    really jobs. It is set at 0.8 so an override needs the model to be sure,
-    not merely to have an opinion.
+    The gate exists because source-labelled priors are sometimes wrong:
+    listings like 'Cleaning work daily worker' can sit under shopping-ish
+    categories and really be jobs. It is set at 0.8 so an override needs the
+    model to be sure, not merely to have an opinion.
     """
     if model_type not in DOC_TYPES:
         return prior, False

@@ -3,7 +3,7 @@
 They did not. `reindex` recomputes every field in indexing._UPDATE_FIELDS from
 the adapter plus the overlays, so a value written straight into SearchDocument
 lasted until the next pass and then vanished with no error -- the adapter simply
-rebuilt the field as empty. Gazette lost 149 English titles that way. iBay,
+rebuilt the field as empty. Gazette lost 149 English titles that way. Other,
 whose adapter supplies no Dhivehi side at all, would have lost ~20,000 titles
 and every translated summary.
 """
@@ -16,7 +16,7 @@ from search.translations import apply_translations, remember, source_hash
 
 
 def draft(**kw):
-    base = dict(source="ibay", source_key="1", doc_type="shopping",
+    base = dict(source="other", source_key="1", doc_type="shopping",
                 url="https://x/1")
     base.update(kw)
     return DocumentDraft(**base)
@@ -24,7 +24,7 @@ def draft(**kw):
 
 @pytest.mark.django_db
 def test_a_stored_translation_is_put_back_on_the_draft():
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair for sale.", value="ގޮނޑިއެއް ވިއްކަނީ")
 
     out = apply_translations(draft(summary_en="A chair for sale."))
@@ -36,7 +36,7 @@ def test_a_stored_translation_is_put_back_on_the_draft():
 def test_real_source_content_is_never_overwritten():
     """If the adapter supplied Dhivehi from the source, that is ground truth and
     a translation of the English has no business replacing it."""
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair for sale.", value="machine translation")
 
     out = apply_translations(
@@ -50,7 +50,7 @@ def test_a_translation_of_text_that_has_changed_is_ignored():
     """A seller edits the listing, so the English is new and the stored Dhivehi
     describes something the document no longer says. Showing it would be worse
     than showing nothing."""
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair for sale.", value="ގޮނޑިއެއް ވިއްކަނީ")
 
     out = apply_translations(draft(summary_en="A desk for sale, reduced."))
@@ -60,7 +60,7 @@ def test_a_translation_of_text_that_has_changed_is_ignored():
 
 @pytest.mark.django_db
 def test_reflowed_whitespace_is_not_a_change():
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair for sale.", value="ގޮނޑިއެއް")
 
     out = apply_translations(draft(summary_en="A  chair\nfor   sale."))
@@ -70,7 +70,7 @@ def test_reflowed_whitespace_is_not_a_change():
 
 @pytest.mark.django_db
 def test_a_missing_source_field_is_ignored_rather_than_trusted():
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair for sale.", value="ގޮނޑިއެއް")
 
     out = apply_translations(draft(summary_en=""))
@@ -80,12 +80,12 @@ def test_a_missing_source_field_is_ignored_rather_than_trusted():
 
 @pytest.mark.django_db
 def test_remembering_twice_updates_rather_than_duplicating():
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair.", value="first")
-    remember("ibay", "1", target_field="summary_dv", source_field="summary_en",
+    remember("other", "1", target_field="summary_dv", source_field="summary_en",
              origin_text="A chair.", value="second")
 
-    rows = FieldTranslation.objects.filter(source="ibay", source_key="1")
+    rows = FieldTranslation.objects.filter(source="other", source_key="1")
     assert rows.count() == 1
     assert rows.first().value == "second"
 
@@ -122,7 +122,7 @@ def test_a_translation_survives_a_reindex(monkeypatch):
                                     payload={})
 
         def to_document(self, raw):
-            # Like iBay: an English side and nothing at all in Dhivehi.
+            # Like Other: an English side and nothing at all in Dhivehi.
             return DocumentDraft(source="toy", source_key="1",
                                  doc_type="shopping", url="https://x/1",
                                  title_en="Office chair",

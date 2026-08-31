@@ -14,10 +14,10 @@ def _ensure_source_seed(db):
     from search.models import Source
 
     seed = [
-        ("ibay", "iBay", "އައިބޭ", "https://ibay.com.mv",
-         "/static/sources/ibay.svg", "iB", "#1f6feb"),
+        ("other", "Other", "އެހެން", "https://other-source.example",
+         "/static/sources/other.svg", "އެ", "#1f6feb"),
         ("gazette", "Gazette", "ގެޒެޓް", "https://gazette.gov.mv",
-         "/static/sources/gazette.svg", "ގ", "#0f766e"),
+         "/sources/gazette.png", "ގ", "#0f766e"),
     ]
     for (key, label_en, label_dv, site_url, icon, fb, accent) in seed:
         Source.objects.update_or_create(

@@ -3,7 +3,7 @@ from ninja import NinjaAPI
 from api.routers import documents, events, meta, search, suggest
 
 api = NinjaAPI(
-    title="Beynunehcheh",
+    title="Gazette Search",
     version="1.0.0",
     urls_namespace="api-v1",
     # Every endpoint is read-only or an anonymous append-only event; there is

@@ -9,8 +9,8 @@ import { ShoppingCard } from "./ShoppingCard";
 
 const serviceResult: ResultOut = {
   id: 100,
-  source: "ibay",
-  url: "https://ibay.com.mv/100",
+  source: "other",
+  url: "https://other-source.example/100",
   title: "Electrician",
   summary: "House wiring, light fitting and safety checks.",
   doc_type: "shopping",

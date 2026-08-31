@@ -9,10 +9,10 @@ def test_sync_specs_streams_a_whole_source(capsys):
     SpecKey.objects.create(key="brand", label_en="Brand", datatype="enum",
                            widget="checkbox", is_facetable=True)
     for i in range(5):
-        SearchDocument.objects.create(source="ibay", source_key=str(i),
+        SearchDocument.objects.create(source="other", source_key=str(i),
                                       doc_type="shopping", url="https://x",
                                       attrs={"specs_raw": {"Brand": "Nokia"}})
-    call_command("sync_specs", "--source", "ibay")
+    call_command("sync_specs", "--source", "other")
     assert DocumentSpec.objects.count() == 5
 
 
@@ -28,8 +28,8 @@ def test_sync_specs_prunes_rows_for_deleted_documents():
 def test_limit_is_respected(capsys):
     SpecKey.objects.create(key="brand", label_en="Brand", datatype="enum")
     for i in range(10):
-        SearchDocument.objects.create(source="ibay", source_key=str(i),
+        SearchDocument.objects.create(source="other", source_key=str(i),
                                       doc_type="shopping", url="https://x",
                                       attrs={"specs_raw": {"Brand": "Nokia"}})
-    call_command("sync_specs", "--source", "ibay", "--limit", "3")
+    call_command("sync_specs", "--source", "other", "--limit", "3")
     assert DocumentSpec.objects.values("document_id").distinct().count() == 3

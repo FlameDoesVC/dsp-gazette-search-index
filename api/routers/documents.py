@@ -11,6 +11,7 @@ from api.ratelimit import report_quota_exceeded
 from api.routers.search import annotate_time
 from api.schemas import AcceptedOut, ReportIn
 from search.models import DocumentReport, SearchDocument
+from search.vocab import annotate_free_text, annotate_labels
 
 router = Router()
 
@@ -51,7 +52,8 @@ def detail(request, doc_id: int):
         "expires_at": doc.expires_at,
         "attrs": doc.attrs,
         "specs": specs,
-        "card": annotate_time(doc.card, doc.doc_type),
+        "card": annotate_free_text(
+            doc.doc_type, annotate_labels(doc.doc_type, annotate_time(doc.card, doc.doc_type))),
         "thumbnails": doc.thumbnails,
         "entity_id": doc.attrs.get("entity_id"),
         "profile_tier": doc.attrs.get("profile_tier", ""),

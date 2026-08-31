@@ -25,7 +25,7 @@ def taxonomy(db):
 
 @pytest.mark.django_db
 def test_the_tier_is_curated_on_the_node_not_parsed_from_a_path(taxonomy):
-    """iBay spells 'Accessories' in its path; another source will not."""
+    """Other spells 'Accessories' in its path; another source will not."""
     assert taxonomy["charger"].tier == "accessory"
 
 
@@ -53,36 +53,36 @@ def test_the_map_is_keyed_on_the_full_path_not_the_leaf(taxonomy):
     laptop_path = ["For Sale", "Computer, Tablets & Networking",
                    "Laptop Accessories", "Charger"]
     SourceCategoryMap.objects.create(
-        source="ibay", path=phone_path,
-        path_key=path_key("ibay", phone_path), category=taxonomy["charger"])
+        source="other", path=phone_path,
+        path_key=path_key("other", phone_path), category=taxonomy["charger"])
     SourceCategoryMap.objects.create(
-        source="ibay", path=laptop_path,
-        path_key=path_key("ibay", laptop_path), category=taxonomy["lcharger"])
+        source="other", path=laptop_path,
+        path_key=path_key("other", laptop_path), category=taxonomy["lcharger"])
 
-    assert map_path("ibay", phone_path) == taxonomy["charger"]
-    assert map_path("ibay", laptop_path) == taxonomy["lcharger"]
+    assert map_path("other", phone_path) == taxonomy["charger"]
+    assert map_path("other", laptop_path) == taxonomy["lcharger"]
 
 
 @pytest.mark.django_db
 def test_an_unmapped_path_maps_to_none(taxonomy):
-    assert map_path("ibay", ["For Sale", "Nothing Like This"]) is None
+    assert map_path("other", ["For Sale", "Nothing Like This"]) is None
 
 
 @pytest.mark.django_db
 def test_a_mapped_row_with_no_category_is_legal(taxonomy):
     """'No canonical category for this path' is a decision, not an error."""
     path = ["Services", "Other Services"]
-    SourceCategoryMap.objects.create(source="ibay", path=path,
-                                     path_key=path_key("ibay", path),
+    SourceCategoryMap.objects.create(source="other", path=path,
+                                     path_key=path_key("other", path),
                                      category=None, note="deliberately unmapped")
-    assert map_path("ibay", path) is None
+    assert map_path("other", path) is None
 
 
 @pytest.mark.django_db
 def test_path_key_is_order_sensitive_and_stable():
-    a = path_key("ibay", ["For Sale", "Games"])
-    assert a == path_key("ibay", ["For Sale", "Games"])
-    assert a != path_key("ibay", ["Games", "For Sale"])
+    a = path_key("other", ["For Sale", "Games"])
+    assert a == path_key("other", ["For Sale", "Games"])
+    assert a != path_key("other", ["Games", "For Sale"])
     assert a != path_key("gazette", ["For Sale", "Games"])
     assert len(a) == 64
 

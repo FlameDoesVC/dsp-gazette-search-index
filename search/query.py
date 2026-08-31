@@ -34,6 +34,12 @@ class SearchResult:
     matched_lang: str
     thumbnails: list = field(default_factory=list)
     category_leaf: str = ""
+    # Whether `title` or `summary` came from the OTHER language because this
+    # document has nothing in the response language -- distinct from
+    # `matched_lang` (spec 9). A document can match the query through its
+    # Dhivehi body text yet only ever have had an English title; in that case
+    # matched_lang == response_lang even though the title shown is not.
+    translated: bool = False
 
 
 @dataclass(slots=True)
@@ -173,18 +179,27 @@ def _to_result(row, plan: QueryPlan) -> SearchResult:
         matched = "en"
 
     prefer_dv = plan.response_lang == "dv"
+    if prefer_dv:
+        title, summary = title_dv or title_en, summary_dv or summary_en
+        translated = (not title_dv and bool(title_en)) or \
+            (not summary_dv and bool(summary_en))
+    else:
+        title, summary = title_en or title_dv, summary_en or summary_dv
+        translated = (not title_en and bool(title_dv)) or \
+            (not summary_en and bool(summary_dv))
+
     return SearchResult(
         id=doc_id,
         source=source,
         source_key=source_key,
         doc_type=dtype,
         url=url,
-        title=(title_dv or title_en) if prefer_dv else (title_en or title_dv),
-        summary=(summary_dv or summary_en) if prefer_dv
-                else (summary_en or summary_dv),
+        title=title,
+        summary=summary,
         card=json.loads(card) if isinstance(card, str) else (card or {}),
         score=float(score),
         matched_lang=matched,
+        translated=translated,
         thumbnails=json.loads(thumbnails) if isinstance(thumbnails, str)
                    else (thumbnails or []),
         category_leaf=category_leaf or "",

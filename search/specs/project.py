@@ -4,7 +4,8 @@ Three inputs, one table:
 
   1. the unit extractor over title and summary  -- catches '24V-5A-120W'
   2. attrs['specs']      -- what P4's enrichment assigned semantic keys to
-  3. attrs['specs_raw']  -- iBay ProductInfo, already near-schema and free
+  3. attrs['specs_raw']  -- a marketplace source's ProductInfo, already
+     near-schema and free
 
 Source 3 is the largest by volume, which is the strongest argument for the
 whole typed-attribute design: `Item Condition` (7,098), `Type` (4,194),

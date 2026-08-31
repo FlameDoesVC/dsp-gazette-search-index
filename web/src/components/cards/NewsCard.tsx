@@ -4,6 +4,7 @@ import { Bidi } from "@/components/Bidi";
 import { SourceBadge } from "@/components/SourceBadge";
 import type { ResultOut } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { isDhivehi } from "@/lib/script";
 import { ProfileNote, SimilarCount } from "./EntityMeta";
 
 /**
@@ -15,6 +16,7 @@ import { ProfileNote, SimilarCount } from "./EntityMeta";
 export function NewsCard({ result }: { result: ResultOut }) {
   const c = result.card as Record<string, never>;
   const href = (c.external_url as string) || result.url;
+  const dv = isDhivehi((c.title as string) || result.title);
 
   return (
     <a
@@ -43,10 +45,11 @@ export function NewsCard({ result }: { result: ResultOut }) {
 
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 text-xs text-base-content/60">
         <Bidi as="span" text={c.office as string} />
-        <Bidi as="span" text={c.announcement_type as string} />
+        <Bidi as="span" text={dv ? (c.announcement_type_label_dv as string) : (c.announcement_type_label_en as string)} />
         {(c.attachment_count as number) > 0 ? (
           <span>{c.attachment_count as number} documents</span>
         ) : null}
+        {result.translated && <span className="badge badge-sm">Translated</span>}
       </div>
       <SimilarCount count={c.listing_count as number | undefined} />
       <ProfileNote

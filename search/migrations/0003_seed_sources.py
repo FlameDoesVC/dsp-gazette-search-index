@@ -6,7 +6,7 @@ SOURCES = [
         label_en="Gazette",
         label_dv="ގެޒެޓް",
         site_url="https://gazette.gov.mv",
-        icon="/static/sources/gazette.svg",
+        icon="/sources/gazette.png",
         icon_fallback_text="ގ",
         accent="#0f766e",
     ),

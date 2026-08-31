@@ -2,7 +2,7 @@
 
 Both syncs cap pages with `5 if settings.DEBUG else <unlimited>`, and
 DJANGO_DEBUG defaults to 0 in this repo -- tests_settings asserts that it does.
-So the cap resolved to 3500 pages for gazette and no cap at all for ibay on any
+So the cap resolved to 3500 pages for gazette and no cap at all for other on any
 machine that had not opted in, and a sync loop running every 5 minutes crawled
 the whole site each cycle. These checks cover the mechanism that actually stops
 it, which needs no configuration to work.

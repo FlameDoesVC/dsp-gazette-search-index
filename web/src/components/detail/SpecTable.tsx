@@ -14,11 +14,18 @@ interface SpecRow {
  * panel is the filter; this is the detail, and dropping keys that never made
  * it to facetable would quietly erase data.
  */
-export function SpecTable({ specs }: { specs: SpecRow[] }) {
+export function SpecTable({
+  specs, headingLevel: Heading = "h2",
+}: {
+  specs: SpecRow[];
+  /** See CompensationTable's headingLevel: h2 on the detail page (under its
+   * h1), h3 inside a result card (whose own title is already an h3). */
+  headingLevel?: "h2" | "h3";
+}) {
   if (!specs.length) return null;
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold">Specifications</h2>
+      <Heading className="text-sm font-semibold">Specifications</Heading>
       <dl className="divide-y divide-base-300 text-sm">
         {specs.map((s, i) => (
           <div key={i} className="flex justify-between gap-4 py-1.5">

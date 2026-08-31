@@ -9,9 +9,9 @@ from search.models import SearchDocument
 @pytest.fixture
 def docs(db, sources):
     SearchDocument.objects.create(
-        source="ibay", source_key="1", doc_type="shopping", url="https://x/1",
+        source="other", source_key="1", doc_type="shopping", url="https://x/1",
         title_en="iPhone 13", summary_en="A used iPhone.", price=9500,
-        attrs={"brand": "Apple"}, card={"source": "ibay", "title": "iPhone 13"},
+        attrs={"brand": "Apple"}, card={"source": "other", "title": "iPhone 13"},
         thumbnails=["https://x/1.jpg"],
     )
     SearchDocument.objects.create(
@@ -43,8 +43,8 @@ def test_search_returns_the_documented_envelope(api, docs):
 @pytest.mark.django_db
 def test_a_result_carries_source_key_not_an_icon_path(api, docs):
     r = api.get("/api/v1/search?q=iphone").json()["results"][0]
-    assert r["source"] == "ibay"
-    assert r["card"]["source"] == "ibay"
+    assert r["source"] == "other"
+    assert r["card"]["source"] == "other"
     assert "icon" not in r["card"]
 
 

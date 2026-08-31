@@ -17,7 +17,7 @@ def test_an_overlong_unit_is_dropped_rather_than_crashing_the_pass(db):
     from search.specs.project import sync_document_specs
 
     doc = SearchDocument.objects.create(
-        source="ibay", source_key="u1", doc_type="shopping", url="https://x/u1",
+        source="other", source_key="u1", doc_type="shopping", url="https://x/u1",
         title_en="Sharp air purifier",
         attrs={"specs": [
             # The real shape of the three that crashed: a NUMBER with a

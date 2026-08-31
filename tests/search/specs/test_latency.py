@@ -23,7 +23,7 @@ def test_discovery_stays_inside_the_facet_budget():
     keys = list(SpecKey.objects.all())
 
     docs = SearchDocument.objects.bulk_create([
-        SearchDocument(source="ibay", source_key=str(i), doc_type="shopping",
+        SearchDocument(source="other", source_key=str(i), doc_type="shopping",
                        url=f"https://x/{i}", title_en=f"power supply {i}",
                        price=100 + i % 900, attrs={"category_path": ["Electronics"]})
         for i in range(20_000)

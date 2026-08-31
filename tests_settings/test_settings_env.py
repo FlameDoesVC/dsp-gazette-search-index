@@ -14,13 +14,13 @@ def test_direct_alias_disables_pooling_behaviour():
 
 def test_secret_key_comes_from_env(monkeypatch):
     monkeypatch.setenv("DJANGO_SECRET_KEY", "from-the-environment")
-    import beynunehcheh.settings as s
+    import gazette_search.settings as s
     importlib.reload(s)
     assert s.SECRET_KEY == "from-the-environment"
 
 
 def test_debug_defaults_off_when_env_absent(monkeypatch):
     monkeypatch.delenv("DJANGO_DEBUG", raising=False)
-    import beynunehcheh.settings as s
+    import gazette_search.settings as s
     importlib.reload(s)
     assert s.DEBUG is False

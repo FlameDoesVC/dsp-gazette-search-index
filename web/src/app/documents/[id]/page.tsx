@@ -8,6 +8,7 @@ import { SpecTable } from "@/components/detail/SpecTable";
 import { Bidi } from "@/components/Bidi";
 import { ReportForm } from "@/components/ReportForm";
 import { SourceBadge } from "@/components/SourceBadge";
+import { isDhivehi } from "@/lib/script";
 
 export default async function DocumentPage({
   params,
@@ -30,6 +31,7 @@ export default async function DocumentPage({
   const summary = (card.summary as string) || (doc.summary_en as string) ||
     (doc.summary_dv as string) || "";
   const thumbnails = ((doc.thumbnails ?? []) as string[]).filter(Boolean);
+  const dv = isDhivehi(title);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
@@ -52,7 +54,7 @@ export default async function DocumentPage({
 
       {docType === "job" && (
         <div className="mt-6">
-          <CompensationTable comp={(card.compensation as never as Compensation) ?? {}} />
+          <CompensationTable comp={(card.compensation as never as Compensation) ?? {}} dv={dv} />
         </div>
       )}
 
@@ -68,7 +70,7 @@ export default async function DocumentPage({
         <div className="mt-6">
           <ApplyBlock methods={(card.apply_methods as never as {
             kind: string; value: string; label_en?: string; label_dv?: string;
-          }[]) ?? []} />
+          }[]) ?? []} dv={dv} />
         </div>
       )}
 

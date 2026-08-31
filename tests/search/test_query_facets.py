@@ -8,7 +8,7 @@ from search.query import search_page
 @pytest.fixture
 def corpus(db):
     def mk(**kw):
-        base = dict(source="ibay", doc_type="shopping", url="https://x",
+        base = dict(source="other", doc_type="shopping", url="https://x",
                     is_active=True, attrs={}, card={}, thumbnails=[])
         base.update(kw)
         return SearchDocument.objects.create(**base)

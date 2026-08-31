@@ -129,29 +129,29 @@ def test_a_provider_failure_records_failed_and_does_not_raise(gazette_job):
 
 @pytest.mark.django_db
 def test_a_matching_hash_and_prompt_version_is_skipped():
-    SearchDocument.objects.create(source="ibay", source_key="1", doc_type="shopping",
+    SearchDocument.objects.create(source="other", source_key="1", doc_type="shopping",
                                   url="https://x", content_hash="h")
-    EnrichedRecord.objects.create(source="ibay", source_key="1", content_hash="h",
+    EnrichedRecord.objects.create(source="other", source_key="1", content_hash="h",
                                   doc_type="shopping", status="ok", prompt_version=1)
-    assert list(select_keys(source="ibay", prompt_version=1)) == []
+    assert list(select_keys(source="other", prompt_version=1)) == []
 
 
 @pytest.mark.django_db
 def test_a_changed_hash_re_enriches():
-    SearchDocument.objects.create(source="ibay", source_key="1", doc_type="shopping",
+    SearchDocument.objects.create(source="other", source_key="1", doc_type="shopping",
                                   url="https://x", content_hash="NEW")
-    EnrichedRecord.objects.create(source="ibay", source_key="1", content_hash="OLD",
+    EnrichedRecord.objects.create(source="other", source_key="1", content_hash="OLD",
                                   doc_type="shopping", status="ok", prompt_version=1)
-    assert list(select_keys(source="ibay", prompt_version=1)) == [("ibay", "1")]
+    assert list(select_keys(source="other", prompt_version=1)) == [("other", "1")]
 
 
 @pytest.mark.django_db
-def test_a_prompt_version_bump_re_enriches_ibay():
-    SearchDocument.objects.create(source="ibay", source_key="1", doc_type="shopping",
+def test_a_prompt_version_bump_re_enriches_a_non_gazette_source():
+    SearchDocument.objects.create(source="other", source_key="1", doc_type="shopping",
                                   url="https://x", content_hash="h")
-    EnrichedRecord.objects.create(source="ibay", source_key="1", content_hash="h",
+    EnrichedRecord.objects.create(source="other", source_key="1", content_hash="h",
                                   doc_type="shopping", status="ok", prompt_version=1)
-    assert list(select_keys(source="ibay", prompt_version=2)) == [("ibay", "1")]
+    assert list(select_keys(source="other", prompt_version=2)) == [("other", "1")]
 
 
 @pytest.mark.django_db
@@ -189,15 +189,15 @@ def test_only_stale_selects_nothing_when_nothing_is_marked():
 
 @pytest.mark.django_db
 def test_failed_records_are_retried_up_to_the_attempt_cap():
-    SearchDocument.objects.create(source="ibay", source_key="1", doc_type="shopping",
+    SearchDocument.objects.create(source="other", source_key="1", doc_type="shopping",
                                   url="https://x", content_hash="h")
-    EnrichedRecord.objects.create(source="ibay", source_key="1", content_hash="h",
+    EnrichedRecord.objects.create(source="other", source_key="1", content_hash="h",
                                   doc_type="shopping", status="failed",
                                   prompt_version=1, attempts=1)
-    assert list(select_keys(source="ibay", prompt_version=1)) == [("ibay", "1")]
+    assert list(select_keys(source="other", prompt_version=1)) == [("other", "1")]
 
     EnrichedRecord.objects.update(attempts=5)
-    assert list(select_keys(source="ibay", prompt_version=1)) == []
+    assert list(select_keys(source="other", prompt_version=1)) == []
 
 
 # transaction=True: enrich_one writes through sync_to_async, which runs on a
@@ -234,7 +234,7 @@ def test_enrichment_never_stores_dhivehi(monkeypatch):
                 "keywords": [],
             }, "mistral:latest"
 
-    inp = EnrichInput(source="ibay", source_key="dv1", doc_type_prior="shopping",
+    inp = EnrichInput(source="other", source_key="dv1", doc_type_prior="shopping",
                       title="Office chair", body="A chair for sale.",
                       scraped={}, candidates=extract_candidates("A chair."),
                       content_hash="h1")

@@ -1,6 +1,6 @@
 """manage.py enrich_documents
 
-    --source ibay --type job --limit N --provider deepseek --force --stale
+    --source gazette --type job --limit N --provider deepseek --force --stale
     --dry-run
 
 Reports the count it is about to process before spending anything, because a

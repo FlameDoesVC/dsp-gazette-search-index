@@ -1,7 +1,8 @@
 """Repost collapsing. Keeps the most recent listing of each group.
 
-Sellers repost the same advertisement daily to stay near the top of iBay's own
-ordering; 8,089 of 20,445 rows are duplicate titles, one appearing 202 times.
+Sellers repost the same advertisement daily to stay near the top of a
+marketplace source's own ordering; 8,089 of 20,445 rows are duplicate titles,
+one appearing 202 times.
 
 The key is (seller, normalized title, price) and deliberately NOT
 `content_hash`: measured, 202 identical-titled rows carry 17 distinct content

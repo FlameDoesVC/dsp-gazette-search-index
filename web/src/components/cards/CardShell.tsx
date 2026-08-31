@@ -17,6 +17,7 @@ export function CardShell({
   summary,
   thumbnail,
   highlight,
+  highlightDir,
   children,
 }: {
   result: ResultOut;
@@ -25,6 +26,15 @@ export function CardShell({
   thumbnail?: string | null;
   /** The one number worth leading with (price / salary / rent). */
   highlight?: ReactNode;
+  /** `highlight` is mixed JSX (a money figure plus a word), not a plain
+   * string, so it can't go through Bidi's own script detection -- the
+   * caller already knows which language it built the node in, so it passes
+   * the direction directly. Without this the wrapping div stays LTR by
+   * default even when the span inside it sets its own `dir="rtl"`. That
+   * inner dir fixes Thaana shaping but not alignment: `text-align: start`
+   * resolves against whichever element actually controls this content's
+   * alignment, which is this div, not the span (spec 10). */
+  highlightDir?: "rtl" | "ltr";
   children?: ReactNode;
 }) {
   const card = result.card as Record<string, never>;
@@ -52,7 +62,9 @@ export function CardShell({
             className="line-clamp-2 text-[15px] font-semibold"
           />
           {highlight ? (
-            <div className="mt-0.5 text-[15px] font-medium">{highlight}</div>
+            <div className="mt-0.5 text-[15px] font-medium" dir={highlightDir}>
+              {highlight}
+            </div>
           ) : null}
           {summary ? (
             <Bidi
@@ -61,6 +73,13 @@ export function CardShell({
               className="mt-0.5 line-clamp-2 text-sm text-base-content/60"
             />
           ) : null}
+          {result.translated && (
+            // Spec 9: title/summary fell back to the other language because
+            // this listing has nothing in the one the query was answered in.
+            // Silent fallback would read as "wrong language" rather than
+            // "this is all there is".
+            <span className="badge badge-sm mt-1">Translated</span>
+          )}
           {children}
         </div>
         {thumbnail ? (

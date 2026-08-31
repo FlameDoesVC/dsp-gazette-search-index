@@ -3,7 +3,7 @@ from search.query import SearchResult
 
 
 def _r(i, doc_type):
-    return SearchResult(id=i, source="ibay", source_key=str(i), doc_type=doc_type,
+    return SearchResult(id=i, source="other", source_key=str(i), doc_type=doc_type,
                         url="https://x", title="t", summary="s", card={},
                         score=1.0 / i, matched_lang="en")
 

@@ -30,8 +30,8 @@ from enrich.preextract import Candidates, candidates_block
 from enrich.schemas import ATTRS_FOR_TYPE, schema_text
 
 # Bump when the instructions or the schemas change in a way that would produce
-# different output. Spec 4.2: a bump re-enriches iBay, and deliberately does
-# NOT backfill gazette (spec 5.7).
+# different output. Spec 4.2: a bump re-enriches non-gazette sources, and
+# deliberately does NOT backfill gazette (spec 5.7).
 PROMPT_VERSION = 4
 
 _INSTRUCTIONS = """\

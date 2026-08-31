@@ -14,13 +14,28 @@ Two constraints hold across all four builders:
 
 from __future__ import annotations
 
+import re
+
 from enrich.compensation import estimate_net, salary_display
 from enrich.schemas import Occupancy, Spec
-from search.vocab import label
+
+# Deliberately a plain regex, not a model call: an email address is either
+# there verbatim in the source text or it isn't, and this only runs when
+# enrichment's own apply_methods came back with no email at all (real
+# example: source 409488, "Support Assistant Grade 1", carried
+# careers.msfd@health.gov.mv in its body but no apply_methods whatsoever).
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def _detect_email(text: str | None) -> str | None:
+    if not text:
+        return None
+    m = _EMAIL_RE.search(text)
+    return m.group(0) if m else None
 
 # Bump when a card's field set changes. Triggers a reindex rather than a
 # runtime lookup. Spec 8.
-CARD_VERSION = 1
+CARD_VERSION = 2
 
 
 def _money(value, currency="MVR") -> str | None:
@@ -85,6 +100,12 @@ def spec_chips(specs: list[Spec], limit: int = 3) -> list[str]:
 
 def _job_card(a, base: dict) -> dict:
     est = estimate_net(a.compensation)
+    methods = [m.model_dump() for m in a.apply_methods]
+    if not any(m["kind"] == "email" for m in methods):
+        detected = _detect_email(base.get("body_text"))
+        if detected:
+            methods.append({"kind": "email", "value": detected,
+                            "label_en": "", "label_dv": ""})
     return {
         "source": base.get("source", ""),
         "role": a.role or base.get("title", ""),
@@ -97,13 +118,12 @@ def _job_card(a, base: dict) -> dict:
         "grade": a.grade,
         "location": base.get("location", ""),
         "position_type": a.position_type,
-        "position_type_label": label("position_type", a.position_type),
-        "job_category_label": label("job_category", a.job_category),
+        "job_category": a.job_category,
         "required_documents": a.required_documents,
         # raw date only; state is computed at query time
         "deadline": a.deadline,
-        "apply_kinds": [m.kind for m in a.apply_methods],
-        "apply_methods": [m.model_dump() for m in a.apply_methods],
+        "apply_kinds": [m["kind"] for m in methods],
+        "apply_methods": methods,
         "detail_source": base.get("detail_source", "listing"),
         "source_label": base.get("source_label", ""),
     }
@@ -127,7 +147,6 @@ def _property_card(a, base: dict) -> dict:
         "furnishing": a.furnishing,
         "tenant_preference": a.tenant_preference or a.occupancy.tenant_preference,
         "listing_kind": a.listing_kind,
-        "listing_kind_label": label("listing_kind", a.listing_kind),
     }
 
 
@@ -141,7 +160,6 @@ def _shopping_card(a, base: dict) -> dict:
         "currency": base.get("currency", "MVR"),
         "negotiable": a.negotiable,
         "condition": a.condition,
-        "condition_label": label("condition", a.condition),
         "brand": a.brand,
         "location": base.get("location", ""),
         "seller_name": base.get("seller_name", ""),
@@ -159,7 +177,6 @@ def _news_card(a, base: dict) -> dict:
         "summary": base.get("summary", ""),
         "office": a.office,
         "announcement_type": a.announcement_type,
-        "announcement_type_label": label("announcement_type", a.announcement_type),
         "published_at": base.get("published_at"),
         "external_url": base.get("external_url", ""),
         "attachment_count": base.get("attachment_count", 0),

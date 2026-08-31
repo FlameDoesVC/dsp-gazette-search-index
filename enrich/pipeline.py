@@ -64,30 +64,12 @@ def _gazette_scraped(iulaan) -> dict:
     }
 
 
-def _ibay_scraped(payload) -> dict:
-    info = payload["info"]
-    p = payload["product"]
-    out = {
-        "employer": info.get("Employer", ""),
-        "position_type": info.get("Position Type", ""),
-        "job_category": info.get("Job Category", ""),
-        "condition": info.get("Item Condition", ""),
-        "brand": info.get("Brand", ""),
-        "neighborhood": info.get("Neighborhood", ""),
-        "furnishing": info.get("Furnishing", ""),
-        "floor": info.get("Floor", ""),
-    }
-    if p.product_location:
-        out["location"] = p.product_location
-    return {k: v for k, v in out.items() if v}
-
-
 def build_input(source: str, source_key: str) -> EnrichInput | None:
     """Assemble everything the model call needs, from the adapter's raw payload.
 
     Reads through the adapter rather than the ORM directly so a new source
-    needs no change here -- the only source-specific parts are the two
-    `scraped` mappers and the prior.
+    needs no change here -- the only source-specific parts are the `scraped`
+    mapper and the prior.
     """
     adapter = adapters.get_adapter(source)
     raw = adapter.fetch_raw(source_key)
@@ -103,10 +85,6 @@ def build_input(source: str, source_key: str) -> EnrichInput | None:
                           iulaan_type=iulaan.iulaan_type.name if iulaan.iulaan_type else "")
         scraped = _gazette_scraped(iulaan)
         title = iulaan.title
-    elif source == "ibay":
-        prior = prior_for("ibay", categories=raw.payload["categories"])
-        scraped = _ibay_scraped(raw.payload)
-        title = raw.payload["product"].name
     else:
         prior = prior_for(source)
         scraped = {}
@@ -176,8 +154,8 @@ async def enrich_one(inp: EnrichInput, client) -> EnrichedRecord:
     if overridden:
         # The first call carried the PRIOR's schema, so whatever attrs came back
         # describe the wrong shape. Ask once more with the right schema. Measured
-        # on the first 31 iBay shopping documents: the model agreed with the
-        # prior 31 times out of 31, so this path is rare and the 61% saved on
+        # on the first 31 non-gazette shopping documents: the model agreed with
+        # the prior 31 times out of 31, so this path is rare and the 61% saved on
         # every other call pays for it many times over.
         try:
             payload, model_name = await client.run_chain(
@@ -253,9 +231,10 @@ def select_keys(
       1. stale_marked_at set  -> always, overriding everything
       2. --force              -> always
       3. content_hash changed -> always
-      4. prompt_version bumped-> iBay only. Gazette is write-once (5.7), so a
-         prompt improvement reaches only newly-ingested iulaan. Without this
-         the next PROMPT_VERSION bump silently re-bills 51,000 documents.
+      4. prompt_version bumped-> non-gazette sources only. Gazette is
+         write-once (5.7), so a prompt improvement reaches only
+         newly-ingested iulaan. Without this the next PROMPT_VERSION bump
+         silently re-bills 51,000 documents.
     """
     qs = SearchDocument.objects.using(settings.STREAM_DB_ALIAS).filter(source=source)
     if doc_type:

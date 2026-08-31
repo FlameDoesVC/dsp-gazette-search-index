@@ -13,7 +13,7 @@ def test_faceted_search_stays_under_budget_at_100k():
     flat in corpus size. If this regresses, the facet aggregation is the
     suspect -- it is N statements over the same CTE."""
     SearchDocument.objects.bulk_create([
-        SearchDocument(source="ibay", source_key=str(i), doc_type="shopping",
+        SearchDocument(source="other", source_key=str(i), doc_type="shopping",
                        url=f"https://x/{i}", title_en=f"iPhone case model {i}",
                        price=100 + (i % 900),
                        attrs={"brand": ["Apple", "Samsung", "Nokia"][i % 3],

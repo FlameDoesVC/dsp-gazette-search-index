@@ -13,7 +13,7 @@ from search.query import search_page
 def _listing(key, title, *, days_ago, seller="s1", price=500):
     # Through the indexer so dedupe_key is populated exactly as in production.
     upsert_drafts([DocumentDraft(
-        source="ibay", source_key=key, doc_type="property",
+        source="other", source_key=key, doc_type="property",
         url=f"https://x/{key}", title_en=title, price=price,
         published_at=timezone.now() - dt.timedelta(days=days_ago),
         attrs={"seller_id": seller},

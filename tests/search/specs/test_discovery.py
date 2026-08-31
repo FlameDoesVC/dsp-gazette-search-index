@@ -57,7 +57,7 @@ def power_supplies(db):
     keys = {k.key: k for k in SpecKey.objects.all()}
     for i in range(30):
         doc = SearchDocument.objects.create(
-            source="ibay", source_key=f"ps{i}", doc_type="shopping",
+            source="other", source_key=f"ps{i}", doc_type="shopping",
             url="https://x", title_en=f"power supply unit {i}",
             price=100 + (i % 900),
             attrs={"category_path": ["Electronics"]},
@@ -142,7 +142,7 @@ def test_an_enum_facet_is_capped_at_twelve_values(db):
                            widget="checkbox", is_facetable=True)
     key = SpecKey.objects.get(key="brand")
     for i in range(40):
-        doc = SearchDocument.objects.create(source="ibay", source_key=f"p{i}",
+        doc = SearchDocument.objects.create(source="other", source_key=f"p{i}",
                                             doc_type="shopping", url="https://x",
                                             title_en=f"phone {i}")
         DocumentSpec.objects.create(document_id=doc.id, key=key, key_raw="brand",
@@ -167,7 +167,7 @@ def test_a_category_supermajority_overrides_the_scoring_order(db):
     keys = {k.key: k for k in SpecKey.objects.all()}
     for i in range(20):
         doc = SearchDocument.objects.create(
-            source="ibay", source_key=f"m{i}", doc_type="shopping",
+            source="other", source_key=f"m{i}", doc_type="shopping",
             url="https://x", title_en=f"iphone {i}",
             attrs={"category_path": ["Electronics", "Mobile Phones"]})
         DocumentSpec.objects.create(document_id=doc.id, key=keys["brand"],

@@ -12,9 +12,9 @@ const meta = {
     { key: "gazette", label_en: "Gazette", label_dv: "ގެޒެޓް",
       icon: "/sources/gazette.svg", icon_fallback_text: "ގ", accent: "",
       site_url: "https://gazette.gov.mv" },
-    { key: "ibay", label_en: "iBay", label_dv: "އައިބޭ",
-      icon: "/sources/ibay.svg", icon_fallback_text: "iB", accent: "",
-      site_url: "https://ibay.com.mv" },
+    { key: "other", label_en: "Other", label_dv: "އެހެން",
+      icon: "/sources/other.svg", icon_fallback_text: "އެ", accent: "",
+      site_url: "https://other-source.example" },
   ],
 };
 
@@ -31,7 +31,7 @@ function renderAll() {
 describe("cross-cutting", () => {
   it("every card carries a source badge", () => {
     renderAll();
-    expect(screen.getAllByText(/Gazette|iBay/).length).toBe(all.length);
+    expect(screen.getAllByText(/Gazette|Other/).length).toBe(all.length);
   });
 
   it("no card places its badge with a physical left/right property", () => {

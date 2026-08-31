@@ -22,6 +22,7 @@ from api.logging import log_query
 from api.schemas import SearchOut
 from search.filters import FilterError, parse_filters
 from search.query import search_page
+from search.vocab import annotate_free_text, annotate_labels
 
 router = Router()
 
@@ -58,14 +59,6 @@ def annotate_time(card: dict, doc_type: str) -> dict:
     return out
 
 
-def resolve_display(result, lang: str) -> tuple[str, str, bool]:
-    """Returns (title, summary, translated)."""
-    # search_page already picked by response language; `translated` records
-    # whether that pick came from the other language's field.
-    translated = result.matched_lang != lang and bool(result.title)
-    return result.title, result.summary, translated
-
-
 @router.get("/search", response=SearchOut)
 def search_endpoint(
     request: HttpRequest,
@@ -96,13 +89,13 @@ def search_endpoint(
     response_lang = lang or result_page.plan.response_lang
     results = []
     for r in result_page.results:
-        card = annotate_time(r.card, r.doc_type)
+        card = annotate_free_text(
+            r.doc_type, annotate_labels(r.doc_type, annotate_time(r.card, r.doc_type)))
         if tab == "images":
             card = {**card, "images": r.thumbnails}
-        title, summary, translated = resolve_display(r, response_lang)
         results.append({
             "id": r.id, "source": r.source, "doc_type": r.doc_type, "url": r.url,
-            "title": title, "summary": summary, "translated": translated,
+            "title": r.title, "summary": r.summary, "translated": r.translated,
             "card": card, "score": r.score,
         })
 

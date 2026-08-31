@@ -51,4 +51,14 @@ describe("PropertyCard", () => {
     render(<PropertyCard result={inferred} />);
     expect(screen.getByTitle(/currency inferred/i)).toBeInTheDocument();
   });
+
+  it("offers no Details toggle when there is nothing behind it", () => {
+    const bare = {
+      ...propertyRoomOfThree,
+      card: { source: "other", location_display: "Hulhumale Phase 2",
+              rent_display: "MVR 7,000 / month", capacity_display: "1 room of 3, shared" },
+    } as never;
+    render(<PropertyCard result={bare} />);
+    expect(screen.queryByRole("button", { name: /details/i })).toBeNull();
+  });
 });

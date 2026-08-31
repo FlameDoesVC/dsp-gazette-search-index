@@ -17,7 +17,7 @@ def registry(db):
 
 
 def _doc(**kw):
-    base = dict(source="ibay", source_key="1", doc_type="shopping",
+    base = dict(source="other", source_key="1", doc_type="shopping",
                 url="https://x", attrs={}, card={})
     base.update(kw)
     return SearchDocument.objects.create(**base)

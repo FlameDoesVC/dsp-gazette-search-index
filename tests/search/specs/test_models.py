@@ -56,7 +56,7 @@ def test_categories_scope_a_key_to_where_it_means_something():
 
 @pytest.mark.django_db
 def test_documentspec_stores_numeric_and_text_values_separately():
-    doc = SearchDocument.objects.create(source="ibay", source_key="1",
+    doc = SearchDocument.objects.create(source="other", source_key="1",
                                         doc_type="shopping", url="https://x")
     DocumentSpec.objects.create(document_id=doc.id, key_raw="voltage",
                                 value_num=24, unit="V")
@@ -76,7 +76,7 @@ def test_documentspec_survives_a_document_that_no_longer_exists():
 
 @pytest.mark.django_db
 def test_a_spec_row_is_unique_per_document_key_and_value():
-    doc = SearchDocument.objects.create(source="ibay", source_key="1",
+    doc = SearchDocument.objects.create(source="other", source_key="1",
                                         doc_type="shopping", url="https://x")
     DocumentSpec.objects.create(document_id=doc.id, key_raw="voltage",
                                 value_num=24, unit="V")

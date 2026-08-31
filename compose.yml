@@ -7,15 +7,15 @@
 # Ollama is intentionally absent: inference runs on the 9070 XT box and is
 # reached over OLLAMA_URL from .env.
 
-name: beynunehcheh
+name: gazette_search
 
 services:
   db:
     image: postgres:18-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-beynunehcheh}
-      POSTGRES_USER: ${POSTGRES_USER:-beynunehcheh}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-beynunehcheh}
+      POSTGRES_DB: ${POSTGRES_DB:-gazette_search}
+      POSTGRES_USER: ${POSTGRES_USER:-gazette_search}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gazette_search}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -23,7 +23,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - pg_isready -U ${POSTGRES_USER:-beynunehcheh} -d ${POSTGRES_DB:-beynunehcheh}
+        - pg_isready -U ${POSTGRES_USER:-gazette_search} -d ${POSTGRES_DB:-gazette_search}
       interval: 5s
       timeout: 5s
       retries: 12
@@ -39,7 +39,7 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-beynunehcheh}:${POSTGRES_PASSWORD:-beynunehcheh}@db:5432/${POSTGRES_DB:-beynunehcheh}
+      DATABASE_URL: postgres://${POSTGRES_USER:-gazette_search}:${POSTGRES_PASSWORD:-gazette_search}@db:5432/${POSTGRES_DB:-gazette_search}
       DJANGO_DEBUG: "1"
       DJANGO_ALLOWED_HOSTS: "*"
       PYTHONUNBUFFERED: "1"
@@ -54,6 +54,8 @@ services:
       # Scanned-PDF transcription. Native PDF input, run via the Batch API.
       TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-claude-haiku-4-5}
       TRANSCRIBE_MAX_PAGES: ${TRANSCRIBE_MAX_PAGES:-10}
+      GAZETTE_MAX_INDEX_PAGES: ${GAZETTE_MAX_INDEX_PAGES:-2}
+      GAZETTE_STOP_AFTER_SEEN_PAGES: ${GAZETTE_STOP_AFTER_SEEN_PAGES:-3}
     ports:
       - "8000:8000"
     volumes:

@@ -37,13 +37,4 @@ describe("ResultList", () => {
     render(<ResultList results={[]} queryId={1} />);
     expect(screen.getByText(/no results/i)).toBeInTheDocument();
   });
-
-  it("uses a grid for a shopping-only result set and a list otherwise", () => {
-    const { rerender } = render(
-      <ResultList results={[shoppingResult]} queryId={1} tab="shopping" />
-    );
-    expect(screen.getByTestId("results")).toHaveClass("grid");
-    rerender(<ResultList results={[jobResult]} queryId={1} tab="job" />);
-    expect(screen.getByTestId("results")).not.toHaveClass("grid");
-  });
 });

@@ -121,7 +121,7 @@ def test_estimated_net_min_is_written_for_the_salary_facet():
 @pytest.mark.django_db
 def test_an_unset_schema_default_does_not_blank_adapter_data():
     """model_dump() returns every field in the schema, including ones the model
-    never touched. Merging it wholesale let `category_path: []` overwrite iBay's
+    never touched. Merging it wholesale let `category_path: []` overwrite Other's
     own breadcrumb on 7,553 documents -- which took in_scope(), _mapped_key()
     and _is_service() out together and halved entity resolution, 22,869 links
     down to 11,098.
@@ -130,12 +130,12 @@ def test_an_unset_schema_default_does_not_blank_adapter_data():
     model: scraped fields win, the model may fill a blank and never overwrite
     one."""
     EnrichedRecord.objects.create(
-        source="ibay", source_key="cp1", doc_type="shopping", status="ok",
+        source="other", source_key="cp1", doc_type="shopping", status="ok",
         content_hash="h", canonical_title_en="Fridge repair",
         attrs={"brand": "Samsung"},          # category_path never mentioned
     )
     draft = DocumentDraft(
-        source="ibay", source_key="cp1", doc_type="shopping",
+        source="other", source_key="cp1", doc_type="shopping",
         url="https://x/cp1", title_en="Fridge repair", content_hash="h",
         attrs={"category_path": ["Services", "Repairs"], "specs_raw": {"a": "b"}},
     )
@@ -152,10 +152,10 @@ def test_false_and_zero_are_answers_not_absences():
     """`negotiable: False` is the whole point of a boolean facet. Dropping
     falsy values instead of empty ones would lose it."""
     EnrichedRecord.objects.create(
-        source="ibay", source_key="fz1", doc_type="shopping", status="ok",
+        source="other", source_key="fz1", doc_type="shopping", status="ok",
         content_hash="h", attrs={"negotiable": False, "quantity": 0},
     )
-    draft = DocumentDraft(source="ibay", source_key="fz1", doc_type="shopping",
+    draft = DocumentDraft(source="other", source_key="fz1", doc_type="shopping",
                           url="https://x/fz1", content_hash="h", attrs={})
 
     out = apply_enrichment(draft)
@@ -176,14 +176,14 @@ def test_the_model_can_never_write_the_source_taxonomy():
     Filtering empty answers is not enough when a wrong answer is worse than a
     blank one and no right answer is possible."""
     EnrichedRecord.objects.create(
-        source="ibay", source_key="tx1", doc_type="shopping", status="ok",
+        source="other", source_key="tx1", doc_type="shopping", status="ok",
         content_hash="h",
         attrs={"category_path": ["Electronics", "Audio Equipment"],
                "specs_raw": {"invented": "yes"},
                "brand": "Sony"},
     )
     draft = DocumentDraft(
-        source="ibay", source_key="tx1", doc_type="shopping",
+        source="other", source_key="tx1", doc_type="shopping",
         url="https://x/tx1", content_hash="h",
         attrs={"category_path": ["For Sale", "Electronics", "Speaker Systems"],
                "specs_raw": {"Brand": "Sony"}},

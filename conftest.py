@@ -9,7 +9,10 @@ import os
 
 
 def pytest_configure(config):
-    os.environ.setdefault("STREAM_DB_ALIAS", "default")
+    # Force, not setdefault: .env sets STREAM_DB_ALIAS=direct for production,
+    # and that var is already present in the process environment (e.g. under
+    # Docker's env_file) well before this hook runs, so setdefault was a no-op.
+    os.environ["STREAM_DB_ALIAS"] = "default"
     from django.conf import settings
 
     settings.STREAM_DB_ALIAS = os.environ["STREAM_DB_ALIAS"]

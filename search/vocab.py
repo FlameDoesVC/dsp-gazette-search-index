@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 
+from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 
 _NON_ALNUM = re.compile(r"[^a-z0-9ހ-޿]+")
@@ -121,3 +122,115 @@ def label(field: str, value: str) -> str:
     if not table:
         return value
     return str(table.get(canonical(value), value))
+
+
+# Which closed-vocab fields each doc_type's card carries. Drives
+# `annotate_labels` below -- add a row here when a new card field joins
+# VOCABULARIES.
+FIELDS_BY_DOC_TYPE = {
+    "job": ("position_type", "job_category"),
+    "shopping": ("condition",),
+    "property": ("listing_kind",),
+    "news": ("announcement_type",),
+}
+
+
+def bilingual_label(field: str, value: str) -> tuple[str, str]:
+    """(english, dhivehi) for one closed-vocab value, independent of whatever
+    locale happens to be active. Mirrors title_en/title_dv: both sides are
+    always sent, and the frontend's own per-element Bidi rendering picks."""
+    with translation.override("en"):
+        en = label(field, value)
+    with translation.override("dv"):
+        dv = label(field, value)
+    return en, dv
+
+
+def annotate_labels(doc_type: str, card: dict) -> dict:
+    """Add `<field>_label_en` / `<field>_label_dv` for every closed-vocab
+    field this doc_type's card carries.
+
+    Resolved here, at request time, rather than baked into `card` at
+    enrichment time: enrichment runs once under whatever locale happens to be
+    active at build time (never a real language choice), so a label frozen
+    then would be wrong for every request in the other language forever. The
+    catalog itself only needs compiling once (`compilemessages`, part of
+    run_pipeline) -- this just looks it up per request, the same way
+    `annotate_time` computes deadline_state per request instead of freezing
+    it at index time.
+    """
+    fields = FIELDS_BY_DOC_TYPE.get(doc_type, ())
+    if not fields:
+        return card
+    out = dict(card)
+    for field_name in fields:
+        value = card.get(field_name)
+        if value:
+            en, dv = bilingual_label(field_name, value)
+            out[f"{field_name}_label_en"] = en
+            out[f"{field_name}_label_dv"] = dv
+    return out
+
+
+def annotate_free_text(doc_type: str, card: dict) -> dict:
+    """Add the Dhivehi side of a job card's recurring free-text fields --
+    role, employer, qualifications, required_documents, allowance names,
+    apply labels -- from whatever `translate_card_vocab` has already put in
+    the cache.
+
+    These are not a closed vocabulary, so there is no catalog to compile;
+    they are looked up from TranslationCache (one batched query per card,
+    never a provider call -- a request is not the place to pay for a
+    translation, only to read one that's already there). A string this
+    command has not translated yet simply has no `_dv` sibling here, and the
+    frontend falls back to the English value it already renders today.
+    """
+    if doc_type != "job":
+        return card
+
+    from core.translate import cached_translations
+
+    qualifications = card.get("qualifications") or []
+    required_documents = card.get("required_documents") or []
+    allowances = (card.get("compensation") or {}).get("allowances") or []
+    apply_methods = card.get("apply_methods") or []
+
+    texts = set(qualifications) | set(required_documents)
+    texts |= {a.get("label_raw") for a in allowances if a.get("label_raw")}
+    texts |= {m.get("label_en") for m in apply_methods
+             if m.get("label_en") and not m.get("label_dv")}
+    role = card.get("role")
+    if role:
+        texts.add(role)
+    employer = card.get("employer")
+    if employer:
+        texts.add(employer)
+
+    translations = cached_translations([t for t in texts if t])
+    if not translations:
+        return card
+
+    out = dict(card)
+    if role in translations:
+        out["role_dv"] = translations[role]
+    if employer in translations:
+        out["employer_dv"] = translations[employer]
+    if qualifications:
+        out["qualifications_dv"] = [translations.get(q, "") for q in qualifications]
+    if required_documents:
+        out["required_documents_dv"] = [
+            translations.get(d, "") for d in required_documents
+        ]
+    if allowances:
+        comp = dict(card["compensation"])
+        comp["allowances"] = [
+            {**a, "label_dv": translations.get(a.get("label_raw", ""), "")}
+            for a in allowances
+        ]
+        out["compensation"] = comp
+    if apply_methods:
+        out["apply_methods"] = [
+            {**m, "label_dv": m.get("label_dv") or translations.get(m.get("label_en", ""), "")}
+            for m in apply_methods
+        ]
+    return out

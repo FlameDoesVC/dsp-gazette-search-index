@@ -7,10 +7,10 @@ def test_meta_lists_active_sources_with_icons(api, sources):
     assert r.status_code == 200
     body = r.json()
     keys = [s["key"] for s in body["sources"]]
-    assert keys == ["gazette", "ibay"]          # ordered, deterministic
+    assert keys == ["gazette", "other"]          # ordered, deterministic
     gazette = body["sources"][0]
     assert gazette["label_dv"] == "ގެޒެޓް"
-    assert gazette["icon"] == "/static/sources/gazette.svg"
+    assert gazette["icon"] == "/sources/gazette.png"
     assert gazette["icon_fallback_text"] == "ގ"
     assert gazette["site_url"].startswith("https://")
 

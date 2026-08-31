@@ -33,10 +33,11 @@ def infer_tier(path: list[str]) -> str:
     against the live corpus rather than by reading the tree:
 
     - `path[1]` is the FAMILY segment and is excluded from the accessory test.
-      iBay names families after their contents, so `Mobile Phones & Accessories`
-      ends in "Accessories" while its `Mobile Phones` child (507 documents) is
-      the most important primary node in the corpus. Including path[1] classifies
-      it as an accessory and breaks the one thing tier exists to decide.
+      A prior marketplace source named families after their contents, so
+      `Mobile Phones & Accessories` ends in "Accessories" while its
+      `Mobile Phones` child (507 documents) is the most important primary
+      node in the corpus. Including path[1] classifies it as an accessory and
+      breaks the one thing tier exists to decide.
     - Parts is tested BEFORE accessory, because `Mobile Phones & Accessories >
       Parts > Battery` matches both and is a part.
 
@@ -100,7 +101,7 @@ class Command(BaseCommand):
     help = "Propose Category nodes and SourceCategoryMap rows from the corpus."
 
     def add_arguments(self, parser):
-        parser.add_argument("--source", default="ibay")
+        parser.add_argument("--source", required=True)
         parser.add_argument("--apply", action="store_true",
                             help="Write rows. Without it, print proposals only.")
 

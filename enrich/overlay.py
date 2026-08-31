@@ -88,10 +88,10 @@ def apply_enrichment(draft: DocumentDraft) -> DocumentDraft:
 
     # Only the keys the model actually FILLED. model_dump() returns every field
     # in the schema including untouched defaults, so merging it wholesale let a
-    # default overwrite real adapter data -- `category_path: []` blanked iBay's
-    # own breadcrumb on 7,553 documents, which took in_scope(), _mapped_key()
-    # and _is_service() out at once and halved entity resolution: 22,869 links
-    # down to 11,098, missed from 33.4% to 67.7%.
+    # default overwrite real adapter data -- `category_path: []` blanked a
+    # source's own breadcrumb on 7,553 documents, which took in_scope(),
+    # _mapped_key() and _is_service() out at once and halved entity
+    # resolution: 22,869 links down to 11,098, missed from 33.4% to 67.7%.
     #
     # This is rule 3 of the prompt applied on our side rather than trusted to
     # the model: scraped fields win, the model may fill a blank and never
@@ -120,6 +120,10 @@ def apply_enrichment(draft: DocumentDraft) -> DocumentDraft:
     base.setdefault("location", draft.location)
     base.setdefault("published_at",
                     draft.published_at.isoformat() if draft.published_at else None)
+    # A regex over the source text, not another model call: an address is
+    # either there verbatim or it isn't, and _job_card only reaches for this
+    # when the model's own apply_methods came back with no email at all.
+    base.setdefault("body_text", f"{draft.text_en}\n{draft.text_dv}")
     draft.card = build_card(draft.doc_type, attrs_model, base=base)
 
     # Aliases and synonyms are search surface, not display surface, so they go

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { postReport } from "@/lib/api";
+import { postReport, type ReportIn } from "@/lib/api";
 import { Disclosure } from "@/components/Disclosure";
 
 const REASONS = [
@@ -19,7 +19,7 @@ const REASONS = [
  * never a dialog: overlays are banned by the cross-cutting rule.
  */
 export function ReportForm({ documentId }: { documentId: number }) {
-  const [reason, setReason] = useState<string>("stale");
+  const [reason, setReason] = useState<ReportIn["reason"]>("stale");
   const [note, setNote] = useState("");
   const [done, setDone] = useState(false);
 

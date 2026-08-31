@@ -20,7 +20,7 @@ def test_system_prompt_is_identical_across_calls_of_one_doc_type():
     a time, so a per-type prefix still hits the cache on every call after the
     first.
     """
-    a = build_messages(source="ibay", doc_type_prior="shopping", title="A",
+    a = build_messages(source="other", doc_type_prior="shopping", title="A",
                        body="b", candidates=extract_candidates("b"), scraped={})
     b = build_messages(source="gazette", doc_type_prior="shopping", title="C",
                        body="d", candidates=extract_candidates("d"),

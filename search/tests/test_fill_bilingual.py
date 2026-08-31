@@ -25,7 +25,7 @@ def stub_translate(monkeypatch):
 
 
 def _doc(**kw):
-    base = dict(source="ibay", source_key="1", doc_type="shopping",
+    base = dict(source="other", source_key="1", doc_type="shopping",
                 url="https://x", title_en="Washing machine")
     base.update(kw)
     return SearchDocument.objects.create(**base)
@@ -73,7 +73,7 @@ def test_very_short_strings_are_copied_rather_than_translated():
 
 @pytest.mark.django_db
 def test_identical_strings_are_translated_once(stub_translate):
-    """40% of iBay titles are duplicates; TranslationCache should absorb them,
+    """40% of Other titles are duplicates; TranslationCache should absorb them,
     but the command must not queue the same string twice either."""
     _doc(source_key="5", title_en="Same title")
     _doc(source_key="6", title_en="Same title")
@@ -101,7 +101,7 @@ def test_closed_vocabulary_fields_are_never_sent_to_the_translator(stub_translat
     """position_type has two distinct values in the whole corpus. Translating
     it per document is both wasteful and inconsistent."""
     SearchDocument.objects.create(
-        source="ibay", source_key="1", doc_type="job", url="https://x",
+        source="other", source_key="1", doc_type="job", url="https://x",
         title_en="Officer", attrs={"position_type": "Permanent",
                                    "job_category": "Medical"},
     )
@@ -114,7 +114,7 @@ def test_closed_vocabulary_fields_are_never_sent_to_the_translator(stub_translat
 @pytest.mark.django_db
 def test_open_prose_attrs_are_translated_into_dv_siblings(stub_translate):
     SearchDocument.objects.create(
-        source="ibay", source_key="1", doc_type="job", url="https://x",
+        source="other", source_key="1", doc_type="job", url="https://x",
         title_en="Officer",
         attrs={"role": "Medical Officer", "qualifications": ["MBBS", "Board cert"]},
     )

@@ -4,11 +4,10 @@ import { ResultCard } from "@/components/cards/ResultCard";
 import { postClick, type ResultOut } from "@/lib/api";
 
 export function ResultList({
-  results, queryId, tab = "all",
+  results, queryId,
 }: {
   results: ResultOut[];
   queryId: number | null;
-  tab?: string;
 }) {
   if (!results.length) {
     return (
@@ -18,17 +17,8 @@ export function ResultList({
     );
   }
 
-  const grid = tab === "shopping" || tab === "images";
-
   return (
-    <div
-      data-testid="results"
-      className={
-        grid
-          ? "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
-          : "space-y-3"
-      }
-    >
+    <div data-testid="results" className="space-y-3">
       {results.map((r, i) => (
         <div
           key={r.id}

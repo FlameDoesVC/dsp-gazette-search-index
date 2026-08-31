@@ -17,11 +17,11 @@ def staff(db):
 @pytest.mark.django_db
 def test_the_candidate_queue_ranks_by_document_count(staff):
     for i in range(3):
-        doc = SearchDocument.objects.create(source="ibay", source_key=str(i),
+        doc = SearchDocument.objects.create(source="other", source_key=str(i),
                                             doc_type="shopping", url="https://x")
         DocumentSpec.objects.create(document_id=doc.id, key_raw="warranty",
                                     value_text="1 year")
-    doc = SearchDocument.objects.create(source="ibay", source_key="x",
+    doc = SearchDocument.objects.create(source="other", source_key="x",
                                         doc_type="shopping", url="https://x")
     DocumentSpec.objects.create(document_id=doc.id, key_raw="colour",
                                 value_text="black")
@@ -34,7 +34,7 @@ def test_the_candidate_queue_ranks_by_document_count(staff):
 
 @pytest.mark.django_db
 def test_promoting_a_key_creates_it_and_links_existing_rows(staff):
-    doc = SearchDocument.objects.create(source="ibay", source_key="1",
+    doc = SearchDocument.objects.create(source="other", source_key="1",
                                         doc_type="shopping", url="https://x")
     DocumentSpec.objects.create(document_id=doc.id, key_raw="warranty",
                                 value_text="1 year")
@@ -50,7 +50,7 @@ def test_promoting_a_key_creates_it_and_links_existing_rows(staff):
 
 @pytest.mark.django_db
 def test_promotion_infers_the_datatype_from_the_stored_values(staff):
-    doc = SearchDocument.objects.create(source="ibay", source_key="1",
+    doc = SearchDocument.objects.create(source="other", source_key="1",
                                         doc_type="shopping", url="https://x")
     DocumentSpec.objects.create(document_id=doc.id, key_raw="weight",
                                 value_num=1.5, unit="kg")
@@ -64,7 +64,7 @@ def test_promotion_infers_the_datatype_from_the_stored_values(staff):
 def test_demoting_a_key_removes_it_from_facets_without_deleting_data(staff):
     key = SpecKey.objects.create(key="brand", label_en="Brand", datatype="enum",
                                  widget="checkbox", is_facetable=True)
-    doc = SearchDocument.objects.create(source="ibay", source_key="1",
+    doc = SearchDocument.objects.create(source="other", source_key="1",
                                         doc_type="shopping", url="https://x")
     DocumentSpec.objects.create(document_id=doc.id, key=key, key_raw="brand",
                                 value_text="Apple")

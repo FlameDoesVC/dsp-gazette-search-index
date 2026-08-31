@@ -7,11 +7,11 @@ from enrich.models import EnrichedRecord
 @pytest.mark.django_db
 def test_identity_is_source_plus_source_key():
     EnrichedRecord.objects.create(
-        source="ibay", source_key="1", content_hash="a" * 64, doc_type="shopping"
+        source="other", source_key="1", content_hash="a" * 64, doc_type="shopping"
     )
     with pytest.raises(IntegrityError):
         EnrichedRecord.objects.create(
-            source="ibay", source_key="1", content_hash="b" * 64, doc_type="job"
+            source="other", source_key="1", content_hash="b" * 64, doc_type="job"
         )
 
 

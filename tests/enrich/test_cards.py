@@ -34,6 +34,37 @@ def test_job_card_leads_with_role_employer_salary():
     assert card["detail_source"] == "attachment"
 
 
+def test_job_card_recovers_an_email_the_model_missed_from_the_source_text():
+    """Real example: source 409488 ("Support Assistant Grade 1") carried
+    careers.msfd@health.gov.mv in its body but enrichment returned no
+    apply_methods at all. A regex over the source text is free and exact
+    where a model call would be neither."""
+    attrs = JobAttrs(role="Support Assistant", apply_methods=[])
+    card = build_card("job", attrs, base={
+        "source": "gazette",
+        "body_text": "...apply by emailing careers.msfd@health.gov.mv before the deadline.",
+    })
+    assert card["apply_kinds"] == ["email"]
+    assert card["apply_methods"][0]["value"] == "careers.msfd@health.gov.mv"
+
+
+def test_job_card_does_not_duplicate_an_email_the_model_already_found():
+    attrs = JobAttrs(role="Support Assistant",
+                     apply_methods=[{"kind": "email", "value": "hr@example.gov.mv"}])
+    card = build_card("job", attrs, base={
+        "source": "gazette",
+        "body_text": "cc careers.msfd@health.gov.mv for questions",
+    })
+    assert card["apply_kinds"] == ["email"]
+    assert card["apply_methods"][0]["value"] == "hr@example.gov.mv"
+
+
+def test_job_card_with_no_email_anywhere_stays_empty():
+    attrs = JobAttrs(role="Support Assistant", apply_methods=[])
+    card = build_card("job", attrs, base={"source": "gazette", "body_text": "no contact info here"})
+    assert card["apply_kinds"] == []
+
+
 def test_job_card_carries_the_line_items_so_the_client_can_recompute():
     """Spec 4.3.2: the working-days control recomputes client-side from the
     same pure logic; nothing is re-fetched."""
@@ -170,7 +201,6 @@ def test_news_card_is_four_things_and_nothing_else():
     assert card["attachment_count"] == 2
     assert set(card) == {
         "source", "title", "summary", "office", "announcement_type",
-        "announcement_type_label",
         "published_at", "external_url", "attachment_count", "is_tender",
     }
 
@@ -178,8 +208,8 @@ def test_news_card_is_four_things_and_nothing_else():
 def test_every_card_carries_its_source():
     for doc_type, attrs in [("job", JobAttrs()), ("property", PropertyAttrs()),
                             ("shopping", ShoppingAttrs()), ("news", NewsAttrs())]:
-        card = build_card(doc_type, attrs, base={"source": "ibay"})
-        assert card["source"] == "ibay", doc_type
+        card = build_card(doc_type, attrs, base={"source": "other"})
+        assert card["source"] == "other", doc_type
 
 
 def test_no_card_embeds_an_icon_path():
@@ -188,5 +218,5 @@ def test_no_card_embeds_an_icon_path():
     re-skinning a source a full reindex."""
     for doc_type, attrs in [("job", JobAttrs()), ("property", PropertyAttrs()),
                             ("shopping", ShoppingAttrs()), ("news", NewsAttrs())]:
-        card = build_card(doc_type, attrs, base={"source": "ibay"})
+        card = build_card(doc_type, attrs, base={"source": "other"})
         assert not any("icon" in k or "svg" in str(v) for k, v in card.items())

@@ -77,8 +77,8 @@ def test_reindex_clears_the_stale_flag():
 
 @pytest.mark.django_db
 def test_price_and_facets_survive_the_round_trip():
-    upsert_drafts([_draft(source="ibay", price=Decimal("280.00"), location="Male")])
-    doc = SearchDocument.objects.get(source="ibay")
+    upsert_drafts([_draft(source="other", price=Decimal("280.00"), location="Male")])
+    doc = SearchDocument.objects.get(source="other")
     assert doc.price == Decimal("280.00")
     assert doc.location == "Male"
 

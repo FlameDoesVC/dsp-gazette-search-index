@@ -30,6 +30,7 @@ export const jobResult: ResultOut = {
                      amount: 4400, basis: "fixed_monthly" }],
     },
     grade: "GS3", location: "Male", position_type: "Permanent",
+    position_type_label_en: "Permanent", position_type_label_dv: "ދާއިމީ",
     deadline: "2026-08-31", deadline_state: "open",
     apply_kinds: ["form", "email"],
     apply_methods: [
@@ -66,10 +67,10 @@ export const jobFloorEstimate: ResultOut = {
 } as ResultOut;
 
 export const propertyRoomOfThree: ResultOut = {
-  ...base, id: 2, source: "ibay", doc_type: "property",
-  title: "Room in Apartment", url: "https://ibay.com.mv/2",
+  ...base, id: 2, source: "other", doc_type: "property",
+  title: "Room in Apartment", url: "https://other-source.example/2",
   card: {
-    source: "ibay", hero_image: "https://x/1.jpg", image_count: 4,
+    source: "other", hero_image: "https://x/1.jpg", image_count: 4,
     location_display: "Hulhumale Phase 2",
     rent_display: "MVR 7,000 / month", currency: "MVR", currency_inferred: false,
     capacity_display: "1 room of 3, shared",
@@ -88,13 +89,14 @@ export const propertyBedSpace: ResultOut = {
 } as ResultOut;
 
 export const shoppingResult: ResultOut = {
-  ...base, id: 4, source: "ibay", doc_type: "shopping",
-  title: "KICO METAL POWER SUPPLY 24V-5A-120W", url: "https://ibay.com.mv/4",
+  ...base, id: 4, source: "other", doc_type: "shopping",
+  title: "KICO METAL POWER SUPPLY 24V-5A-120W", url: "https://other-source.example/4",
   card: {
-    source: "ibay", hero_image: "https://x/ps.jpg", image_count: 2,
+    source: "other", hero_image: "https://x/ps.jpg", image_count: 2,
     title: "KICO METAL POWER SUPPLY 24V-5A-120W",
     price_display: "MVR 850", currency: "MVR", negotiable: false,
-    condition: "New", brand: "KICO", location: "Male",
+    condition: "New", condition_label_en: "New", condition_label_dv: "އާ",
+    brand: "KICO", location: "Male",
     seller_name: "Kico Store", seller_is_premium: true,
     spec_chips: ["24V", "5A", "120W"],
   },
@@ -109,13 +111,56 @@ export const newsResult: ResultOut = {
     title: "Bids invited for harbour works",
     summary: "The ministry invites sealed bids for harbour construction at Kulhudhuffushi.",
     office: "Ministry of Example", announcement_type: "ބީލަން",
+    announcement_type_label_en: "Tender", announcement_type_label_dv: "ބީލަން",
     published_at: "2026-08-01T00:00:00Z",
     external_url: "https://gazette.gov.mv/iulaan/5",
     attachment_count: 2, is_tender: true,
   },
 } as ResultOut;
 
+export const dhivehiNewsResult: ResultOut = {
+  ...newsResult, id: 7, title: "ބީލަން ހުށަހެޅުއްވުމަށް",
+  card: { ...newsResult.card, title: "ބީލަން ހުށަހެޅުއްވުމަށް" },
+} as ResultOut;
+
 export const dhivehiTitleResult: ResultOut = {
   ...base, id: 6, title: "ވަޒީފާގެ ފުރުޞަތު", translated: true,
   doc_type: "job", card: { ...jobResult.card, role: "ވަޒީފާގެ ފުރުޞަތު" },
+} as ResultOut;
+
+// Real-world shape: enrichment's `role` is English-only, but the query
+// resolved this document's title to Dhivehi -- the card must show the
+// resolved title, not silently fall back to English (the bug spec 9 exists
+// to prevent, just one layer up from title/summary).
+export const dhivehiTitleEnglishRoleResult: ResultOut = {
+  ...base, id: 8, title: "ލެބޯޓްރީ ޓެކްނީޝަން", translated: false,
+  doc_type: "job", card: { ...jobResult.card, role: "Laboratory Technician" },
+} as ResultOut;
+
+// A Dhivehi-titled job whose free-text fields carry the _dv siblings
+// translate_card_vocab produces -- one qualification deliberately has no
+// _dv yet, to exercise the per-item English fallback.
+export const dhivehiJobFreeTextResult: ResultOut = {
+  ...base, id: 9, title: "ލެބޯޓްރީ ޓެކްނީޝަން", translated: false,
+  doc_type: "job",
+  card: {
+    ...jobResult.card,
+    role: "Laboratory Technician",
+    employer: "The Maldives National University",
+    employer_dv: "ދިވެހިރާއްޖޭގެ ޤައުމީ ޔުނިވަރސިޓީ",
+    qualifications: ["A related degree", "Two years experience"],
+    qualifications_dv: ["ގުޅުންހުރި ދާއިރާއަކުން ޑިގްރީއެއް", ""],
+    required_documents: ["Updated CV"],
+    required_documents_dv: ["އަޕްޑޭޓް ކުރެވިފައިވާ ސީވީ"],
+    compensation: {
+      ...(jobResult.card.compensation as Record<string, unknown>),
+      allowances: [{ kind: "attendance", label_raw: "Attendance Allowance",
+                    label_dv: "ހާޒިރީ އެލަވަންސް", amount: 4400,
+                    basis: "fixed_monthly" }],
+    },
+    apply_methods: [
+      { kind: "form", value: "https://forms.gle/abc", label_en: "Online via form link",
+        label_dv: "ފޯމު މެދުވެރިކޮށް" },
+    ],
+  },
 } as ResultOut;

@@ -54,10 +54,10 @@ def test_a_different_reason_from_the_same_reporter_is_a_new_report(api, doc):
 def test_reports_are_rate_limited_per_ip(api, doc, settings):
     settings.REPORT_RATE_LIMIT = 3
     for i in range(3):
-        d = SearchDocument.objects.create(source="ibay", source_key=f"r{i}",
+        d = SearchDocument.objects.create(source="other", source_key=f"r{i}",
                                           doc_type="shopping", url="https://x")
         assert _post(api, d.id).status_code == 202
-    d = SearchDocument.objects.create(source="ibay", source_key="over",
+    d = SearchDocument.objects.create(source="other", source_key="over",
                                       doc_type="shopping", url="https://x")
     r = _post(api, d.id)
     assert r.status_code == 202                 # still 202, deliberately

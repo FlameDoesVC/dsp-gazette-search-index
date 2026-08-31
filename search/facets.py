@@ -36,8 +36,6 @@ def _f(**kw) -> FacetDef:
     return FacetDef(**kw)
 
 
-_SOURCE = _f(key="source", label_en="Source", label_dv="މަޞްދަރު",
-             widget="checkbox", storage="column", path="source")
 _LOCATION = _f(key="location", label_en="Location", label_dv="ތަން",
                widget="checkbox", storage="column", path="location")
 
@@ -57,7 +55,6 @@ JOB_FACETS = [
     _f(key="deadline", label_en="Deadline", label_dv="ސުންގަޑި",
        widget="checkbox", storage="column", path="expires_at"),
     _LOCATION,
-    _SOURCE,
 ]
 
 PROPERTY_FACETS = [
@@ -88,7 +85,6 @@ PROPERTY_FACETS = [
        widget="range", storage="attrs", path="square_feet", unit="sqft"),
     _f(key="tenant_preference", label_en="Tenants", label_dv="ކުއްޔަށްހިފާ ފަރާތް",
        widget="checkbox", storage="attrs_array", path="tenant_preference"),
-    _SOURCE,
 ]
 
 SHOPPING_FACETS = [
@@ -105,11 +101,9 @@ SHOPPING_FACETS = [
     _f(key="has_images", label_en="Has photos", label_dv="ފޮޓޯ ހުރި",
        widget="toggle", storage="column", path="thumbnails"),
     _LOCATION,
-    _SOURCE,
 ]
 
 NEWS_FACETS = [
-    _SOURCE,
     _f(key="office", label_en="Office", label_dv="އޮފީސް",
        widget="checkbox", storage="attrs", path="office", top_n=20),
     _f(key="announcement_type", label_en="Type", label_dv="ބާވަތް",
@@ -121,7 +115,7 @@ NEWS_FACETS = [
 ]
 
 # The 'all' tab offers only what is meaningful across every type.
-ALL_FACETS = [_SOURCE, _LOCATION,
+ALL_FACETS = [_LOCATION,
               _f(key="doc_type", label_en="Type", label_dv="ބާވަތް",
                  widget="checkbox", storage="column", path="doc_type")]
 

@@ -2,7 +2,7 @@ import { getMeta } from "@/lib/api";
 import { MetaProvider } from "@/components/MetaProvider";
 import "./globals.css";
 
-export const metadata = { title: "Beynunehcheh" };
+export const metadata = { title: "Gazette Search" };
 
 export default async function RootLayout({
   children,

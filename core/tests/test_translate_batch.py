@@ -73,11 +73,39 @@ def test_an_empty_input_makes_no_call(db, provider):
     assert rec.prompts == []
 
 
+def test_a_line_with_an_unexpected_script_is_rejected_and_retried_individually(db, monkeypatch):
+    """Real failure: translategemma:4b returned Hangul/Telugu/Tamil mixed into
+    a batch's Dhivehi output for one line among several correct ones. Trusting
+    the batch positionally would have cached the garbage forever."""
+    from core.models import TranslationCache
+    from core.translate import _hash
+
+    calls = []
+
+    def fake_chat(prompt, **kw):
+        calls.append(prompt)
+        if len(calls) == 1:
+            # Line 2 is garbled (Hangul), line 1 and 3 are clean Dhivehi.
+            return "1. ދިވެހި\n2. 가나다\n3. ސަރުކާރު"
+        return "clean fallback"
+
+    monkeypatch.setattr("core.translate._chat", fake_chat)
+    out = translate_batch_sync(["a", "b", "c"], target="dv")
+
+    assert len(calls) == 2                     # one batch call, one fallback
+    assert out[0] == "ދިވެހި"
+    assert out[1] == "clean fallback"
+    assert out[2] == "ސަރުކާރު"
+    # The garbled line must never have been cached under "b".
+    assert not TranslationCache.objects.filter(source_hash=_hash("b"),
+                                               translated_text__contains="가").exists()
+
+
 def test_the_cache_is_consulted_per_item_not_per_batch(provider, db):
     """A batch of six where five are cached must send one item, not six.
     Keying the cache on the batch would make it useless -- batches never
-    repeat, individual titles repeat constantly (40% of iBay titles are
-    duplicates)."""
+    repeat, individual titles repeat constantly (40% of titles from a prior
+    marketplace source were duplicates)."""
     from core.models import TranslationCache
     from core.translate import _hash
     for i, t in enumerate(["a", "b", "c", "d", "e"]):

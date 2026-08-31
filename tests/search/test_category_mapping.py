@@ -8,8 +8,8 @@ from search.taxonomy import path_key
 
 def draft(path, **kw):
     return DocumentDraft(
-        source="ibay", source_key=kw.pop("source_key", "1"), doc_type="shopping",
-        url="https://ibay.com.mv/x", title_en=kw.pop("title", "A charger"),
+        source="other", source_key=kw.pop("source_key", "1"), doc_type="shopping",
+        url="https://other-source.example/x", title_en=kw.pop("title", "A charger"),
         attrs={"category_path": path}, **kw)
 
 
@@ -20,8 +20,8 @@ def mapped(db):
     node = Category.objects.create(key="accessories-charger", label_en="Phone Charger",
                                    parent=family, tier="accessory")
     path = ["For Sale", "Mobile Phones & Accessories", "Accessories", "Charger"]
-    SourceCategoryMap.objects.create(source="ibay", path=path,
-                                     path_key=path_key("ibay", path), category=node)
+    SourceCategoryMap.objects.create(source="other", path=path,
+                                     path_key=path_key("other", path), category=node)
     return node, path
 
 
@@ -29,7 +29,7 @@ def mapped(db):
 def test_a_mapped_document_gets_the_canonical_category(mapped):
     node, path = mapped
     upsert_drafts([draft(path)])
-    doc = SearchDocument.objects.get(source="ibay", source_key="1")
+    doc = SearchDocument.objects.get(source="other", source_key="1")
     assert doc.category_id == node.id
 
 
@@ -40,7 +40,7 @@ def test_category_leaf_comes_from_the_canonical_label_not_the_source_path(mapped
     unambiguous one."""
     node, path = mapped
     upsert_drafts([draft(path)])
-    doc = SearchDocument.objects.get(source="ibay", source_key="1")
+    doc = SearchDocument.objects.get(source="other", source_key="1")
     assert doc.category_leaf == "Phone Charger"
 
 
@@ -48,7 +48,7 @@ def test_category_leaf_comes_from_the_canonical_label_not_the_source_path(mapped
 def test_an_unmapped_path_keeps_the_raw_leaf_and_no_category(mapped):
     """Nothing regresses for a path nobody has reviewed yet."""
     upsert_drafts([draft(["For Sale", "Unreviewed Thing"], source_key="2")])
-    doc = SearchDocument.objects.get(source="ibay", source_key="2")
+    doc = SearchDocument.objects.get(source="other", source_key="2")
     assert doc.category_id is None
     assert doc.category_leaf == "Unreviewed Thing"
 
@@ -56,7 +56,7 @@ def test_an_unmapped_path_keeps_the_raw_leaf_and_no_category(mapped):
 @pytest.mark.django_db
 def test_a_document_with_no_path_is_valid(mapped):
     upsert_drafts([draft([], source_key="3")])
-    doc = SearchDocument.objects.get(source="ibay", source_key="3")
+    doc = SearchDocument.objects.get(source="other", source_key="3")
     assert doc.category_id is None
     assert doc.category_leaf == ""
 
@@ -71,8 +71,8 @@ def test_map_categories_updates_in_place_without_a_reindex(mapped):
     upsert_drafts([draft(path, source_key="4")])
     SearchDocument.objects.filter(source_key="4").update(category=None,
                                                          category_leaf="Charger")
-    call_command("map_categories", "--source", "ibay")
-    doc = SearchDocument.objects.get(source="ibay", source_key="4")
+    call_command("map_categories", "--source", "other")
+    doc = SearchDocument.objects.get(source="other", source_key="4")
     assert doc.category_id == node.id
     assert doc.category_leaf == "Phone Charger"
 
@@ -92,10 +92,10 @@ def test_map_path_does_not_query_once_per_document(mapped):
     from search.taxonomy import map_path
 
     node, path = mapped
-    map_path("ibay", path)                      # warm
+    map_path("other", path)                      # warm
     with CaptureQueriesContext(connection) as ctx:
         for _ in range(50):
-            map_path("ibay", path)
+            map_path("other", path)
     assert len(ctx) == 0
 
 
@@ -107,10 +107,10 @@ def test_an_unmapped_path_is_cached_too(mapped):
     from search.taxonomy import map_path
 
     miss = ["For Sale", "Not Reviewed"]
-    assert map_path("ibay", miss) is None
+    assert map_path("other", miss) is None
     with CaptureQueriesContext(connection) as ctx:
         for _ in range(20):
-            assert map_path("ibay", miss) is None
+            assert map_path("other", miss) is None
     assert len(ctx) == 0
 
 
@@ -121,10 +121,10 @@ def test_editing_a_category_invalidates_the_cache(mapped):
     from search.taxonomy import map_path
 
     node, path = mapped
-    assert map_path("ibay", path).label_en == "Phone Charger"
+    assert map_path("other", path).label_en == "Phone Charger"
     node.label_en = "Mobile Phone Charger"
     node.save()
-    assert map_path("ibay", path).label_en == "Mobile Phone Charger"
+    assert map_path("other", path).label_en == "Mobile Phone Charger"
 
 
 @pytest.mark.django_db
@@ -132,10 +132,10 @@ def test_deactivating_a_category_invalidates_the_cache(mapped):
     from search.taxonomy import map_path
 
     node, path = mapped
-    assert map_path("ibay", path) is not None
+    assert map_path("other", path) is not None
     node.is_active = False
     node.save()
-    assert map_path("ibay", path) is None
+    assert map_path("other", path) is None
 
 
 @pytest.mark.django_db
@@ -145,13 +145,13 @@ def test_remapping_a_path_invalidates_the_cache(mapped):
     from search.taxonomy import map_path
 
     node, path = mapped
-    assert map_path("ibay", path) == node
+    assert map_path("other", path) == node
     other = Category.objects.create(key="something-else", label_en="Something Else",
                                     tier="primary")
-    row = SourceCategoryMap.objects.get(source="ibay", path=path)
+    row = SourceCategoryMap.objects.get(source="other", path=path)
     row.category = other
     row.save()
-    assert map_path("ibay", path) == other
+    assert map_path("other", path) == other
 
 
 @pytest.mark.django_db(transaction=True, databases=["default", "direct"])
@@ -175,8 +175,8 @@ def test_map_categories_works_when_streaming_over_the_direct_alias(mapped):
         category=None, category_leaf="Charger")
 
     with override_settings(STREAM_DB_ALIAS="direct"):
-        call_command("map_categories", "--source", "ibay")
+        call_command("map_categories", "--source", "other")
 
-    doc = SearchDocument.objects.get(source="ibay", source_key="direct-1")
+    doc = SearchDocument.objects.get(source="other", source_key="direct-1")
     assert doc.category_id == node.id
     assert doc.category_leaf == "Phone Charger"

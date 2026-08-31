@@ -325,10 +325,10 @@ class DocumentSpec(models.Model):
 class Category(models.Model):
     """The canonical taxonomy. Source-independent by design.
 
-    iBay happens to publish a hierarchy with `Accessories` and `Parts` as
-    literal path segments; gazette publishes none, and a future source may
-    publish flat or wrong tags. Sources map INTO this tree (SourceCategoryMap)
-    and query parsing reads only this.
+    A prior marketplace source published a hierarchy with `Accessories` and
+    `Parts` as literal path segments; gazette publishes none, and a future
+    source may publish flat or wrong tags. Sources map INTO this tree
+    (SourceCategoryMap) and query parsing reads only this.
 
     `tier` is curated per node rather than parsed from a path segment, because
     the segment exists in exactly one source's paths.
@@ -361,9 +361,10 @@ class Category(models.Model):
 class SourceCategoryMap(models.Model):
     """One row per distinct source category path.
 
-    Keyed on the full path, not the leaf: iBay spells `Charger` under two
-    different families and `Car Accessories` under two more, so a leaf-keyed
-    map merges categories that rank and facet differently.
+    Keyed on the full path, not the leaf: a prior marketplace source spelled
+    `Charger` under two different families and `Car Accessories` under two
+    more, so a leaf-keyed map merges categories that rank and facet
+    differently.
 
     `category = NULL` is a legal, reviewed decision meaning "no canonical
     category for this path", and is not the same as an absent row, which means
@@ -399,14 +400,15 @@ class FieldTranslation(models.Model):
     recomputed from the adapter plus the draft overlays, so a value written
     directly into the table survives exactly until the next pass. It failed
     silently, too -- the adapter simply rebuilt `summary_dv` as empty and no
-    error was raised anywhere. Gazette lost 149 English titles that way; iBay
-    would have lost ~20,000 Dhivehi titles and every translated summary.
+    error was raised anywhere. Gazette lost 149 English titles that way; a
+    prior non-gazette source would have lost ~20,000 Dhivehi titles and every
+    translated summary.
 
     Gazette had somewhere to put them (Iulaan.translated_title, which its
-    adapter reads) and iBay has nothing, and adding translated_* columns to
-    tables that mirror scraped data is the wrong shape: a machine translation is
-    derived, not scraped. So this is a sidecar applied as a draft overlay, which
-    is how enrichment and the catalog already reach the index.
+    adapter reads) and other sources have nothing, and adding translated_*
+    columns to tables that mirror scraped data is the wrong shape: a machine
+    translation is derived, not scraped. So this is a sidecar applied as a
+    draft overlay, which is how enrichment already reaches the index.
 
     `source_hash` is the hash of the text that WAS TRANSLATED, not of this
     value. When a seller edits a listing the English changes, its hash stops

@@ -8,7 +8,7 @@ from search.models import ClickLog, QueryLog, SearchDocument
 
 @pytest.fixture
 def doc(db):
-    return SearchDocument.objects.create(source="ibay", source_key="1",
+    return SearchDocument.objects.create(source="other", source_key="1",
                                          doc_type="shopping", url="https://x",
                                          title_en="iPhone 13")
 

@@ -13,7 +13,7 @@ def indexed(db):
         ("", "ވަޒީފާގެ ފުރުޞަތު", "job"),
         ("", "ވަޒީފާގެ ފުރުޞަތު", "job"),
     ], start=1):
-        SearchDocument.objects.create(source="ibay", source_key=str(i),
+        SearchDocument.objects.create(source="other", source_key=str(i),
                                       doc_type=dtype, url="https://x",
                                       title_en=t_en, title_dv=t_dv)
     rebuild_terms()

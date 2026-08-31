@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import django
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "beynunehcheh.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gazette_search.settings")
 django.setup()
 
 from search.adapters.base import DocumentDraft  # noqa: E402

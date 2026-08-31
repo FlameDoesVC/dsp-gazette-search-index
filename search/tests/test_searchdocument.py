@@ -31,7 +31,7 @@ def test_source_and_source_key_are_unique_together():
 @pytest.mark.django_db
 def test_same_source_key_allowed_under_a_different_source():
     _make(source="gazette", source_key="1")
-    _make(source="ibay", source_key="1")
+    _make(source="other", source_key="1")
     assert SearchDocument.objects.filter(source_key="1").count() == 2
 
 

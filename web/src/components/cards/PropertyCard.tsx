@@ -1,7 +1,6 @@
 "use client";
 
 import { Bidi } from "@/components/Bidi";
-import { Disclosure } from "@/components/Disclosure";
 import type { ResultOut } from "@/lib/api";
 import { CardShell } from "./CardShell";
 import { ProfileNote, SimilarCount } from "./EntityMeta";
@@ -9,12 +8,14 @@ import { ProfileNote, SimilarCount } from "./EntityMeta";
 export function PropertyCard({ result }: { result: ResultOut }) {
   const c = result.card as Record<string, never>;
   const hero = c.hero_image as string | null;
+  const hasDetails = c.bedrooms != null || c.bathrooms != null || !!c.furnishing ||
+    !!c.floor || c.square_feet != null || c.has_lift != null;
 
   return (
     <CardShell
       result={result}
       title={(c.location_display as string) || result.title}
-      summary={result.summary || undefined}
+      summary={hasDetails ? undefined : (result.summary || undefined)}
       thumbnail={hero}
       highlight={
         <>
@@ -49,8 +50,8 @@ export function PropertyCard({ result }: { result: ResultOut }) {
           />
         ))}
       </div>
-      <Disclosure label="Details">
-        <dl className="space-y-1 text-sm text-base-content/60">
+      {hasDetails && (
+        <dl className="mt-2 space-y-1 text-sm text-base-content/60">
           {c.bedrooms != null && (
             <div className="flex justify-between gap-4"><dt>Bedrooms</dt><dd>{c.bedrooms as number}</dd></div>
           )}
@@ -70,7 +71,7 @@ export function PropertyCard({ result }: { result: ResultOut }) {
             <div className="flex justify-between gap-4"><dt>Lift</dt><dd>{c.has_lift ? "Yes" : "No"}</dd></div>
           )}
         </dl>
-      </Disclosure>
+      )}
       <SimilarCount count={c.listing_count as number | undefined} />
       <ProfileNote
         tier={c.profile_tier as string | undefined}

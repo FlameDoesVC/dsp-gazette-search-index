@@ -16,8 +16,8 @@ Translation, not transliteration. See P5 Task 0C step 5 for the measured
 comparison; feeding English orthography through the query-side transliterator
 produces phonetic nonsense.
 
-Deduplicated before dispatch: 20,442 iBay titles are 12,353 unique strings,
-and TranslationCache absorbs the rest.
+Deduplicated before dispatch: 20,442 titles from a prior marketplace source
+were 12,353 unique strings, and TranslationCache absorbs the rest.
 """
 
 from __future__ import annotations
